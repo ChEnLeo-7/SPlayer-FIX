@@ -41,6 +41,7 @@ import { textRule } from "@/utils/rules";
 import { debounce } from "lodash-es";
 import { createPlaylist } from "@/api/playlist";
 import { updateUserLikePlaylist } from "@/utils/auth";
+import { canUseServerLocalFavorites, createServerPlaylist } from "@/utils/localFavorites";
 
 const props = withDefaults(
   defineProps<{
@@ -121,6 +122,12 @@ const toCreatePlaylist = debounce(
       // 本地歌单
       try {
         await localFormRef.value?.validate();
+        if (canUseServerLocalFavorites()) {
+          await createServerPlaylist(localFormData.value.name, localFormData.value.description);
+          emit("close");
+          window.$message.success("新建本地歌单成功");
+          return;
+        }
         await localStore.createLocalPlaylist(
           localFormData.value.name,
           localFormData.value.description,

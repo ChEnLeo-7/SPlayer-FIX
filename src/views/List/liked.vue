@@ -53,6 +53,7 @@ import { isObject } from "lodash-es";
 import { useDataStore, useStatusStore } from "@/stores";
 import { openBatchList, openUpdatePlaylist } from "@/utils/modal";
 import { updateUserLikePlaylist } from "@/utils/auth";
+import { canUseServerLocalFavorites, syncServerLocalFavorites } from "@/utils/localFavorites";
 import { useListDetail } from "@/composables/List/useListDetail";
 import { useListSearch } from "@/composables/List/useListSearch";
 import { useListScroll } from "@/composables/List/useListScroll";
@@ -384,6 +385,12 @@ onActivated(async () => {
 });
 
 onMounted(async () => {
+  if (canUseServerLocalFavorites()) {
+    await syncServerLocalFavorites();
+    loadLikedCache();
+    setLoading(false);
+    return;
+  }
   // 首先确保用户歌单数据已加载
   if (!dataStore.userLikeData.playlists?.length) {
     try {

@@ -57,8 +57,17 @@ export const songUrl = (
     params: {
       id,
       level,
+      unblock: true,
       timestamp: Date.now(),
     },
+  });
+};
+
+// 直接获取灰色歌曲链接
+export const matchSongUrl = (id: number, source?: string) => {
+  return request({
+    url: "/song/url/match",
+    params: { id, source, noCookie: true },
   });
 };
 

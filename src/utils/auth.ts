@@ -1,4 +1,5 @@
 import { getCookie, removeCookie, setCookies } from "./cookie";
+import { toRaw } from "vue";
 import type { CoverType, ArtistType, SongType } from "@/types/main";
 import {
   userAccount,
@@ -24,6 +25,13 @@ import { likeArtist } from "@/api/artist";
 import { likeAlbum } from "@/api/album";
 import { radioSub } from "@/api/radio";
 import router from "@/router";
+import {
+  canUseServerLocalFavorites,
+  likeServerLocalAlbum,
+  likeServerLocalPlaylist,
+  likeServerLocalSong,
+  syncServerLocalFavorites,
+} from "@/utils/localFavorites";
 
 /**
  * 用户是否登录
@@ -50,6 +58,7 @@ export const toLogout = async (clearUserList = false): Promise<void> => {
   if (clearUserList) {
     dataStore.userList = [];
   }
+  if (canUseServerLocalFavorites()) await syncServerLocalFavorites();
   // 跳转首页
   router.push("/");
   window.$message.success("成功退出登录");
@@ -335,6 +344,11 @@ export const toLikeSong: DebouncedFunc<(song: SongType, like: boolean) => Promis
   async (song: SongType, like: boolean): Promise<void> => {
     try {
       if (!isLogin()) {
+        if (canUseServerLocalFavorites()) {
+          await likeServerLocalSong(song, like);
+          window.$message.success(like ? "已添加到本地收藏" : "已取消本地收藏");
+          return;
+        }
         window.$message.warning("请登录后使用");
         return;
       }
@@ -378,12 +392,19 @@ const toLikeSomething = (
   thingName: string,
   request: () => (id: number, t: 1 | 2) => Promise<{ code: number }>,
   update: () => Promise<void>,
-): DebouncedFunc<(id: number, like: boolean) => Promise<void>> =>
+  localLike?: (item: CoverType, like: boolean) => Promise<void>,
+): DebouncedFunc<(target: number | CoverType, like: boolean) => Promise<void>> =>
   debounce(
-    async (id: number, like: boolean): Promise<void> => {
+    async (target: number | CoverType, like: boolean): Promise<void> => {
       // 错误情况
+      const id = typeof target === "number" ? target : Number(target?.id);
       if (!id) return;
       if (!isLogin()) {
+        if (canUseServerLocalFavorites() && localLike && typeof target !== "number") {
+          await localLike(target, like);
+          window.$message.success(like ? "已添加到本地收藏" : "已取消本地收藏");
+          return;
+        }
         window.$message.warning("请登录后使用");
         return;
       }
@@ -406,23 +427,92 @@ const toLikeSomething = (
     { leading: true, trailing: false },
   );
 
+// 更新本地歌手关注
+const normalizeLocalArtist = (artist: ArtistType): ArtistType => {
+  const rawArtist = toRaw(artist);
+  return {
+    ...rawArtist,
+    id: Number(rawArtist.id),
+    coverSize: rawArtist.coverSize ? { ...toRaw(rawArtist.coverSize) } : undefined,
+  };
+};
+
+const updateLocalArtistLike = async (artist: ArtistType, like: boolean): Promise<void> => {
+  const dataStore = useDataStore();
+  const localArtist = normalizeLocalArtist(artist);
+  const list = dataStore.userLikeData.artists.map(normalizeLocalArtist);
+  const index = list.findIndex((item) => item.id === localArtist.id);
+
+  if (like) {
+    if (index !== -1) {
+      window.$message.info("本地关注中已存在该歌手");
+      return;
+    }
+    list.unshift(localArtist);
+    await dataStore.setUserLikeData("artists", list);
+    window.$message.success("已添加到本地关注");
+    return;
+  }
+
+  if (index === -1) {
+    window.$message.info("该歌手不在本地关注中");
+    return;
+  }
+  list.splice(index, 1);
+  await dataStore.setUserLikeData("artists", list);
+  window.$message.success("已取消本地关注");
+};
+
 // 收藏/取消收藏歌单
 export const toLikePlaylist = toLikeSomething(
   "收藏",
   "歌单",
   () => likePlaylist,
   updateUserLikePlaylist,
+  likeServerLocalPlaylist,
 );
 
 // 收藏/取消收藏专辑
-export const toLikeAlbum = toLikeSomething("收藏", "专辑", () => likeAlbum, updateUserLikeAlbums);
+export const toLikeAlbum = toLikeSomething(
+  "收藏",
+  "专辑",
+  () => likeAlbum,
+  updateUserLikeAlbums,
+  likeServerLocalAlbum,
+);
 
 // 收藏/取消收藏歌手
-export const toLikeArtist = toLikeSomething(
-  "收藏",
-  "歌手",
-  () => likeArtist,
-  updateUserLikeArtists,
+export const toLikeArtist: DebouncedFunc<
+  (target: number | ArtistType, like: boolean) => Promise<void>
+> = debounce(
+  async (target: number | ArtistType, like: boolean): Promise<void> => {
+    try {
+      const id = typeof target === "number" ? target : Number(target?.id);
+      if (!id) return;
+
+      if (isLogin() !== 1) {
+        if (typeof target === "number") {
+          window.$message.warning("暂无歌手信息，无法添加到本地关注");
+          return;
+        }
+        await updateLocalArtistLike(target, like);
+        return;
+      }
+
+      const { code } = await likeArtist(id, like ? 1 : 2);
+      if (code === 200) {
+        window.$message.success((like ? "" : "取消") + "收藏歌手成功");
+        await updateUserLikeArtists();
+      } else {
+        window.$message.success((like ? "" : "取消") + "收藏歌手失败，请重试");
+      }
+    } catch (error) {
+      console.error("Failed to update artist like:", error);
+      window.$message.error("更新歌手关注状态失败");
+    }
+  },
+  300,
+  { leading: true, trailing: false },
 );
 
 // 订阅/取消订阅播客
@@ -535,8 +625,8 @@ export const deleteSongs = async (
       negativeText: "取消",
       onPositiveClick: async () => {
         // 本地歌单
-        if (pid.toString().length === 16) {
-          const localStore = useLocalStore();
+        const localStore = useLocalStore();
+        if (localStore.isLocalPlaylist(pid)) {
           const success = await localStore.removeSongsFromLocalPlaylist(
             pid,
             ids.map((id) => id.toString()),

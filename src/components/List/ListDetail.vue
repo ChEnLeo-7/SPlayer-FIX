@@ -70,7 +70,7 @@
                   (config.showArtist || config.showCreator) &&
                   settingStore.playlistPageElements.creator
                 "
-                class="item"
+                class="item main-meta"
               >
                 <SvgIcon name="Person" :depth="3" />
                 <div
@@ -356,15 +356,16 @@ const handleTabChange = (value: "songs" | "comments") => {
     transition:
       height 0.3s,
       opacity 0.3s;
-    .cover {
-      position: relative;
-      display: flex;
-      width: auto;
-      height: 100%;
+      .cover {
+        position: relative;
+        display: flex;
+        width: auto;
+        height: 100%;
       aspect-ratio: 1/1;
       margin-right: 20px;
       border-radius: 8px;
       transition:
+        height 0.3s,
         opacity 0.3s,
         margin 0.3s,
         transform 0.3s;
@@ -463,12 +464,18 @@ const handleTabChange = (value: "songs" | "comments") => {
         margin-bottom: 12px;
       }
       .meta {
+        max-width: 100%;
         .item {
           display: flex;
           align-items: center;
+          min-width: 0;
           .n-icon {
+            flex: 0 0 auto;
             font-size: 20px;
             margin-right: 4px;
+          }
+          .artists {
+            min-width: 0;
           }
           .ar {
             display: inline-flex;
@@ -509,11 +516,24 @@ const handleTabChange = (value: "songs" | "comments") => {
         left: 0;
         bottom: 0;
         width: 100%;
+        min-width: 0;
+        .left {
+          min-width: 0;
+          max-width: 100%;
+        }
         :deep(.n-button) {
           height: 40px;
           transition: all 0.3s var(--n-bezier);
+          .n-button__content {
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
         }
         .more {
+          flex: 0 0 auto;
           width: 40px;
         }
         .search {
@@ -553,25 +573,113 @@ const handleTabChange = (value: "songs" | "comments") => {
       }
     }
     @media (max-width: 768px) {
-      height: 180px;
+      position: absolute;
+      height: 184px;
+      padding-bottom: 12px;
       .cover {
+        height: 150px;
         margin-right: 12px;
       }
       .data {
-        padding-right: 20px;
+        min-width: 0;
+        width: calc(100% - 162px);
+        max-width: calc(100% - 162px);
+        padding-right: 8px;
         .name {
+          display: block;
+          width: 100%;
+          max-width: 100%;
           font-size: 22px;
           margin-bottom: 8px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          :deep(.n-ellipsis),
+          :deep(.n-ellipsis__line) {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
         }
         .collapse {
           top: 42px;
+          width: 100%;
+          max-width: 100%;
+          max-height: 88px;
+          overflow: hidden;
+        }
+        .description {
+          display: block;
+          width: 100%;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .meta {
+          flex-wrap: wrap;
+          gap: 3px 10px !important;
+          max-width: 100%;
+          overflow: hidden;
+          .item {
+            flex: 0 0 auto;
+            max-width: max-content;
+            min-width: 0;
+            font-size: 13px;
+            overflow: visible;
+            .n-icon {
+              font-size: 18px;
+              margin-right: 3px;
+            }
+            .artists,
+            .ar,
+            .n-text {
+              min-width: 0;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+            .artists {
+              display: block;
+              flex: 1;
+            }
+            .ar {
+              display: inline;
+            }
+          }
+          .main-meta {
+            flex: 1 0 100%;
+            max-width: 100%;
+            overflow: hidden;
+          }
         }
         .menu {
+          left: 0;
+          right: 0;
+          bottom: 0;
+          width: 100%;
+          max-width: 100%;
+          .left {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px !important;
+            width: 100%;
+            max-width: 100%;
+          }
           :deep(.n-button) {
             height: 34px;
+            max-width: calc(50% - 25px);
             --n-font-size: 13px;
-            --n-padding: 0 14px;
+            --n-padding: 0 12px;
             --n-icon-size: 16px;
+          }
+          :deep(.n-button.more) {
+            width: 34px;
+            max-width: 34px;
+            min-width: 34px;
+            padding: 0;
           }
         }
       }
@@ -579,8 +687,9 @@ const handleTabChange = (value: "songs" | "comments") => {
   }
   &.small {
     .detail {
-      height: 120px;
+      height: 104px;
       .cover {
+        height: 84px;
         margin-right: 12px;
         .cover-mask,
         .play-count {
@@ -591,16 +700,26 @@ const handleTabChange = (value: "songs" | "comments") => {
         .name {
           font-size: 22px;
         }
+        .collapse {
+          display: none;
+        }
         .menu {
           :deep(.n-button),
           .search,
           .tabs {
             height: 32px;
+            max-width: calc(50% - 24px);
             --n-font-size: 13px;
             --n-padding: 0 14px;
             --n-icon-size: 16px;
             --n-tab-font-size: 13px;
             --n-tab-padding: 2px 0;
+          }
+          :deep(.n-button.more) {
+            width: 32px;
+            max-width: 32px;
+            min-width: 32px;
+            padding: 0;
           }
         }
       }

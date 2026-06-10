@@ -35,7 +35,7 @@
           strong
           secondary
           round
-          @click="toLikePlaylist(playlistId, !isLikePlaylist)"
+          @click="detailData && toLikePlaylist(detailData, !isLikePlaylist)"
         >
           <template #icon>
             <SvgIcon :name="isLikePlaylist ? 'Favorite' : 'FavoriteBorder'" />
@@ -95,6 +95,7 @@ import { renderIcon, copyData, getShareUrl } from "@/utils/helper";
 import { isLogin, toLikePlaylist, updateUserLikePlaylist } from "@/utils/auth";
 import { useDataStore, useLocalStore, useStatusStore } from "@/stores";
 import { openBatchList, openUpdatePlaylist } from "@/utils/modal";
+import { canUseServerLocalFavorites } from "@/utils/localFavorites";
 import { useListDetail } from "@/composables/List/useListDetail";
 import { useListSearch } from "@/composables/List/useListSearch";
 import { useListScroll } from "@/composables/List/useListScroll";
@@ -269,7 +270,7 @@ const getPlaylistDetail = async (
   clearSearch();
   if (!refresh && detailData.value?.id !== id) resetPlaylistData(getList);
   // 等待本地歌单加载
-  if (id.toString().length === 16 && !localStore.isInitialized) {
+  if (!canUseServerLocalFavorites() && !localStore.isInitialized) {
     try {
       await localStore.readLocalPlaylists();
     } catch (e) {

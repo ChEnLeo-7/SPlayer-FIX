@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory, Router } from "vue-router";
 import { openUserLogin } from "@/utils/modal";
 import { isElectron } from "@/utils/env";
 import { isLogin } from "@/utils/auth";
+import { canUseServerLocalFavorites, syncServerLocalFavorites } from "@/utils/localFavorites";
 import routes from "./routes";
 
 // 基础配置
@@ -28,7 +29,7 @@ const router: Router = createRouter({
 });
 
 // 前置守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // console.log("前置守卫", to, from);
   // 进度条
   if (!isElectron && to.path !== from.path) {
@@ -36,6 +37,12 @@ router.beforeEach((to, from, next) => {
   }
   // 需要登录
   if (to.meta.needLogin && !isLogin()) {
+    const isLocalFavoritesRoute = to.path === "/like-songs" || to.path.startsWith("/like");
+    if (isLocalFavoritesRoute && canUseServerLocalFavorites()) {
+      await syncServerLocalFavorites();
+      next();
+      return;
+    }
     if (!isElectron) window.$loadingBar?.error();
     window.$message?.warning("请登录后使用");
     openUserLogin();

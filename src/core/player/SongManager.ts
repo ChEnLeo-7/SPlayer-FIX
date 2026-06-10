@@ -1,5 +1,5 @@
 import { personalFm, personalFmToTrash } from "@/api/rec";
-import { songQuality, songUrl, unlockSongUrl } from "@/api/song";
+import { matchSongUrl, songQuality, songUrl, unlockSongUrl } from "@/api/song";
 import { useLyricManager } from "@/core/player/LyricManager";
 import {
   useDataStore,
@@ -177,6 +177,24 @@ class SongManager {
   };
 
   /**
+   * 判断是否为可播放地址
+   * @param url 播放地址
+   */
+  private isPlayableUrl = (url?: string | null): url is string => {
+    if (!url || typeof url !== "string") return false;
+    return /^(https?:\/\/|blob:|file:|\/)/.test(url);
+  };
+
+  /**
+   * 处理网页端跨域音频
+   * @param url 播放地址
+   */
+  private normalizePlayableUrl = (url: string): string => {
+    if (isElectron || !/^https?:\/\//.test(url)) return url;
+    return `/music/proxy?url=${url}`;
+  };
+
+  /**
    * 获取在线播放链接
    * @param id 歌曲id
    * @returns 在线播放信息
@@ -220,16 +238,19 @@ class SongManager {
     const songData = Array.isArray(res.data) ? res.data[0] : res.data?.[0];
 
     // 是否有播放地址
-    if (!songData || !songData?.url) return { id, url: undefined };
+    if (!songData || !this.isPlayableUrl(songData?.url)) return { id, url: undefined };
     // 是否仅能试听
-    const isTrial = songData?.freeTrialInfo != null;
+    const freeTrialInfo = songData?.freeTrialInfo;
+    const isTrial = freeTrialInfo != null && freeTrialInfo !== "null";
     // 返回歌曲地址
-    const normalizedUrl = isElectron
-      ? songData.url
-      : songData.url
-          .replace(/^http:/, "https:")
-          .replace(/m804\.music\.126\.net/g, "m801.music.126.net")
-          .replace(/m704\.music\.126\.net/g, "m701.music.126.net");
+    const normalizedUrl = this.normalizePlayableUrl(
+      isElectron
+        ? songData.url
+        : songData.url
+            .replace(/^http:/, "https:")
+            .replace(/m804\.music\.126\.net/g, "m801.music.126.net")
+            .replace(/m704\.music\.126\.net/g, "m701.music.126.net"),
+    );
     // 若为试听且未开启试听播放，则将 url 置为空，仅标记为试听
     const finalUrl = isTrial && !settingStore.playSongDemo ? null : normalizedUrl;
 
@@ -315,7 +336,7 @@ class SongManager {
           (result) => ({
             server,
             result,
-            success: result.code === 200 && !!result.url,
+            success: result.code === 200 && this.isPlayableUrl(result.url),
           }),
         ),
       ),
@@ -335,7 +356,7 @@ class SongManager {
         console.log(`最终音质判断：详细输出：`, { unlockUrl, quality });
         return {
           id: songId,
-          url: unlockUrl,
+          url: this.normalizePlayableUrl(unlockUrl),
           isUnlocked: true,
           quality,
           source: r.value.server,
@@ -343,6 +364,34 @@ class SongManager {
       }
     }
     return { id: songId, url: undefined };
+  };
+
+  /**
+   * 获取灰色歌曲链接
+   * @param id 歌曲 id
+   */
+  private getMatchedSongUrl = async (id: number): Promise<AudioSource> => {
+    try {
+      const result = await matchSongUrl(id);
+      const url =
+        result?.url ||
+        (typeof result?.data === "string" ? result.data : undefined) ||
+        result?.data?.url ||
+        result?.data?.[0]?.url ||
+        result?.proxyUrl;
+      if (!this.isPlayableUrl(url)) return { id, url: undefined };
+      this.triggerCacheDownload(id, url);
+      return {
+        id,
+        url: this.normalizePlayableUrl(url),
+        isUnlocked: true,
+        source: SongUnlockServer.NETEASE,
+        quality: url.includes(".flac") || url.includes(".wav") ? QualityType.SQ : QualityType.HQ,
+      };
+    } catch (error) {
+      console.warn(`⚠️ [${id}] 灰色歌曲链接获取失败`, error);
+      return { id, url: undefined };
+    }
   };
 
   /**
@@ -429,7 +478,7 @@ class SongManager {
       const songId = nextSong.type === "radio" ? nextSong.dj?.id : nextSong.id;
       if (!songId) return;
       // 是否可解锁
-      const canUnlock = isElectron && nextSong.type !== "radio" && settingStore.useSongUnlock;
+      const canUnlock = nextSong.type !== "radio" && settingStore.useSongUnlock;
       // 先请求官方地址
       const { url: officialUrl, isTrial, quality } = await this.getOnlineUrl(songId, false);
       if (officialUrl && !isTrial) {
@@ -448,7 +497,14 @@ class SongManager {
         if (unlockUrl.url) {
           this.nextPrefetch = { id: songId, url: unlockUrl.url, isUnlocked: true };
           return this.nextPrefetch;
-        } else if (officialUrl && settingStore.playSongDemo) {
+        } else {
+          const matchUrl = await this.getMatchedSongUrl(songId);
+          if (matchUrl.url) {
+            this.nextPrefetch = matchUrl;
+            return this.nextPrefetch;
+          }
+        }
+        if (officialUrl && settingStore.playSongDemo) {
           // 解锁失败，若官方为试听且允许试听，保留官方试听地址
           this.nextPrefetch = { id: songId, url: officialUrl, source: "official" };
           return this.nextPrefetch;
@@ -530,7 +586,7 @@ class SongManager {
     // 在线获取
     try {
       // 是否可解锁
-      const canUnlock = isElectron && song.type !== "radio" && settingStore.useSongUnlock;
+      const canUnlock = song.type !== "radio" && settingStore.useSongUnlock;
 
       // 如果指定了非官方源，直接走解锁流程
       if (forceSource && forceSource !== "auto") {
@@ -562,6 +618,11 @@ class SongManager {
         if (unlockUrl.url) {
           console.log(`🔓 [${songId}] 解锁成功`, unlockUrl);
           return unlockUrl;
+        }
+        const matchUrl = await this.getMatchedSongUrl(songId);
+        if (matchUrl.url) {
+          console.log(`🔓 [${songId}] 灰色歌曲链接获取成功`, matchUrl);
+          return matchUrl;
         }
       }
       // 最后的兜底：检查本地是否有缓存（不区分音质）

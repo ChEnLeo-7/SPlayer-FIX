@@ -7,6 +7,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
+      - ./data:/data/splayer
     ports:
       - 25884:25884
     restart: always

@@ -283,7 +283,6 @@ const createLocalStore = () => {
   const isLocalPlaylist = (id: number | string | undefined | null): boolean => {
     if (!id) return false;
     const strId = id.toString();
-    if (strId.length !== 16) return false;
     // 检查是否存在于本地歌单列表
     return localPlaylists.value.some((p) => p.id.toString() === strId);
   };

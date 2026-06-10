@@ -20,7 +20,7 @@
           strong
           secondary
           round
-          @click="toLikeAlbum(albumId, !isLikeAlbum)"
+          @click="detailData && toLikeAlbum(detailData, !isLikeAlbum)"
         >
           <template #icon>
             <SvgIcon :name="isLikeAlbum ? 'Favorite' : 'FavoriteBorder'" />

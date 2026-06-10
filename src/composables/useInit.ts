@@ -4,6 +4,7 @@ import { useDownloadManager } from "@/core/resource/DownloadManager";
 import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
 import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
 import { isElectron, isMac } from "@/utils/env";
+import { canUseServerLocalFavorites, syncServerLocalFavorites } from "@/utils/localFavorites";
 import { printVersion } from "@/utils/log";
 import { openUserAgreement } from "@/utils/modal";
 import { useEventListener } from "@vueuse/core";
@@ -38,6 +39,7 @@ export const useInit = () => {
     openUserAgreement();
     // 加载数据
     await dataStore.loadData();
+    if (canUseServerLocalFavorites()) await syncServerLocalFavorites();
     // 初始化 MediaSession
     mediaSessionManager.init();
     // 初始化播放器

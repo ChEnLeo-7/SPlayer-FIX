@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 import { useDataStore, useSettingStore } from "@/stores";
+import { canUseServerLocalFavorites } from "@/utils/localFavorites";
 
 const dataStore = useDataStore();
 const settingStore = useSettingStore();
@@ -36,13 +37,15 @@ const plTypeName = ["我创建的", "我收藏的"];
 
 // 歌单列表内容
 const listData = computed(() =>
-  dataStore.userLikeData.playlists
-    ?.filter((pl) =>
-      plTypeChoose.value === 0
-        ? pl.userId === dataStore.userData.userId
-        : pl?.userId !== dataStore.userData.userId,
-    )
-    .slice(plTypeChoose.value === 0 ? 1 : 0),
+  canUseServerLocalFavorites()
+    ? dataStore.userLikeData.playlists
+    : dataStore.userLikeData.playlists
+        ?.filter((pl) =>
+          plTypeChoose.value === 0
+            ? pl.userId === dataStore.userData.userId
+            : pl?.userId !== dataStore.userData.userId,
+        )
+        .slice(plTypeChoose.value === 0 ? 1 : 0),
 );
 
 // 更换歌单类型

@@ -100,6 +100,7 @@ import { playlistTracks } from "@/api/playlist";
 import { debounce } from "lodash-es";
 import { isLogin, updateUserLikePlaylist, updateUserLikeSongs } from "@/utils/auth";
 import { openCreatePlaylist } from "@/utils/modal";
+import { addSongsToServerPlaylist, canUseServerLocalFavorites } from "@/utils/localFavorites";
 
 const props = defineProps<{
   data: SongType[];
@@ -161,6 +162,17 @@ const addToLocalPlaylist = debounce(
   async (playlistId: number) => {
     loadingMsg.value = window.$message.loading("正在添加歌曲至本地歌单", { duration: 0 });
     try {
+      if (canUseServerLocalFavorites()) {
+        const result = await addSongsToServerPlaylist(playlistId, props.data);
+        if (loadingMsg.value) loadingMsg.value.destroy();
+        emit("close");
+        if (result.addedCount > 0) {
+          window.$message.success(`成功添加 ${result.addedCount} 首歌曲至本地歌单`);
+        } else {
+          window.$message.info("所选歌曲已在歌单中");
+        }
+        return;
+      }
       // 本地歌曲使用 id 的字符串形式
       const songIds = props.data.map((item) => item.id.toString());
       const result = await localStore.addSongsToLocalPlaylist(playlistId, songIds);

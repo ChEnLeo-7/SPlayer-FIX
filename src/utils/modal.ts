@@ -2,6 +2,7 @@ import type { CoverType, UpdateInfoType, SettingType, SongType } from "@/types/m
 import { CURRENT_AGREEMENT_VERSION } from "@/constants/agreement";
 import { NScrollbar } from "naive-ui";
 import { isLogin } from "./auth";
+import { canUseServerLocalFavorites } from "@/utils/localFavorites";
 import { isArray, isFunction } from "lodash-es";
 import { useDataStore, useSettingStore } from "@/stores";
 import router from "@/router";
@@ -191,16 +192,17 @@ export const openSongInfoEditor = async (song: SongType) => {
 // 添加到歌单
 export const openPlaylistAdd = async (data: SongType[], isLocal: boolean) => {
   if (!data.length) return window.$message.warning("请正确选择歌曲");
-  if (!isLogin() && !isLocal) return openUserLogin();
+  const useLocal = isLocal || canUseServerLocalFavorites();
+  if (!isLogin() && !useLocal) return openUserLogin();
   const { default: PlaylistAdd } = await import("@/components/Modal/PlaylistAdd.vue");
   const modal = window.$modal.create({
     preset: "card",
     transformOrigin: "center",
     autoFocus: false,
     style: { width: "600px" },
-    title: isLocal ? "添加到本地歌单" : "添加到歌单",
+    title: useLocal ? "添加到本地歌单" : "添加到歌单",
     content: () => {
-      return h(PlaylistAdd, { data, isLocal, onClose: () => modal.destroy() });
+      return h(PlaylistAdd, { data, isLocal: useLocal, onClose: () => modal.destroy() });
     },
   });
 };

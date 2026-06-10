@@ -94,7 +94,7 @@
                 strong
                 secondary
                 round
-                @click="toLikeArtist(artistId, !isLikeArtist)"
+                @click="handleLikeArtist"
               >
                 <template #icon>
                   <SvgIcon :name="isLikeArtist ? 'Favorite' : 'FavoriteBorder'" />
@@ -229,6 +229,20 @@ const isLikeArtist = computed(() => {
   return dataStore.userLikeData.artists.some((ar) => ar.id === artistId.value);
 });
 
+// 关注歌手
+const handleLikeArtist = async () => {
+  if (!artistDetailData.value) {
+    window.$message.warning("暂无歌手信息，无法关注");
+    return;
+  }
+  try {
+    await toLikeArtist(artistDetailData.value, !isLikeArtist.value);
+  } catch (error) {
+    console.error("Failed to update artist like:", error);
+    window.$message.error("更新歌手关注状态失败");
+  }
+};
+
 // 获取歌手详情
 const getArtistDetail = async (id: number) => {
   try {
@@ -309,6 +323,7 @@ watch(
       margin-right: 20px;
       border-radius: 50%;
       transition:
+        height 0.3s,
         opacity 0.3s,
         margin 0.3s,
         transform 0.3s;
@@ -397,11 +412,14 @@ watch(
       }
       .meta {
         margin-bottom: 8px;
+        max-width: 100%;
         .item {
           display: flex;
           align-items: center;
+          min-width: 0;
           cursor: pointer;
           .n-icon {
+            flex: 0 0 auto;
             font-size: 20px;
             margin-right: 4px;
           }
@@ -412,11 +430,24 @@ watch(
         left: 0;
         bottom: 0;
         width: 100%;
+        min-width: 0;
+        .left {
+          min-width: 0;
+          max-width: 100%;
+        }
         .n-button {
           height: 40px;
           transition: all 0.3s var(--n-bezier);
+          :deep(.n-button__content) {
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
         }
         .more {
+          flex: 0 0 auto;
           width: 40px;
         }
       }
@@ -468,6 +499,147 @@ watch(
     .router-view {
       &.artist-songs {
         padding-top: 160px;
+      }
+    }
+  }
+  @media (max-width: 768px) {
+    .tabs {
+      margin-top: 8px;
+    }
+    .detail {
+      position: relative;
+      height: 172px;
+      padding-bottom: 12px;
+      .cover {
+        height: 150px;
+        margin-right: 12px;
+      }
+      .data {
+        min-width: 0;
+        padding-right: 8px;
+        .name {
+          width: 100%;
+          max-width: 100%;
+          height: auto;
+          min-height: 34px;
+          font-size: 22px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          .name-text,
+          .name-alias {
+            min-width: 0;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+        }
+        .collapse {
+          top: 38px;
+          width: 100%;
+          max-width: 100%;
+          max-height: 70px;
+          overflow: hidden;
+        }
+        .identify,
+        .description {
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .description {
+          display: none;
+        }
+        .meta {
+          flex-wrap: wrap;
+          gap: 4px 10px !important;
+          max-width: 100%;
+          overflow: hidden;
+          .item {
+            min-width: 0;
+            max-width: 100%;
+            font-size: 13px;
+            overflow: hidden;
+            .n-icon {
+              font-size: 18px;
+              margin-right: 3px;
+            }
+            .n-text {
+              min-width: 0;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+          }
+        }
+        .menu {
+          left: 0;
+          bottom: 0;
+          width: 100%;
+          max-width: 100%;
+          .left {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px !important;
+            width: 100%;
+            max-width: 100%;
+          }
+          .n-button {
+            height: 34px;
+            max-width: calc(50% - 25px);
+            --n-font-size: 13px;
+            --n-padding: 0 12px;
+            --n-icon-size: 16px;
+          }
+          .more {
+            width: 34px;
+            max-width: 34px;
+            min-width: 34px;
+            padding: 0;
+          }
+        }
+      }
+    }
+    .router-view {
+      &.artist-songs {
+        padding-top: 220px;
+      }
+    }
+    &.small {
+      .router-view {
+        &.artist-songs {
+          padding-top: 160px;
+        }
+      }
+      .detail {
+        height: 104px;
+        padding-bottom: 8px;
+        .cover {
+          height: 84px;
+        }
+        .data {
+          .name {
+            font-size: 20px;
+          }
+          .collapse {
+            display: none;
+          }
+          .menu {
+            .n-button,
+            .search {
+              height: 32px;
+              max-width: calc(50% - 24px);
+            }
+            .more {
+              width: 32px;
+              max-width: 32px;
+              min-width: 32px;
+            }
+          }
+        }
       }
     }
   }
