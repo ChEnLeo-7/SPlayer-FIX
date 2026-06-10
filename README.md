@@ -1,10 +1,11 @@
-> [!CAUTION]
->
-> # 本项目进入维护模式
->
-> 项目已进入维护模式，后续仅进行必要的维护与重大问题修复，不再主动开发新功能
->
-> 新功能及后续版本请移步 [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next)
+## 二改说明
+侧重点在于完善在 Docker 部署网页端上面的体验，利用 AI 改了点代码，本人并未修改过任何代码，基本不会有更新，如有冒犯请联系删除
+
+### 🎉 功能（原版不再提）
+
+- ✨ 支持 Docker 部署的网页端解灰
+- 📱 更全的移动端UI适配
+- 👤 支持未登录下收藏歌手/专辑/歌单
 
 <div align="center">
 <img alt="logo" height="100" width="100" src="public/icons/favicon.png" />
@@ -14,13 +15,6 @@
 [API Docs](https://splayer.imsyy.top/api.html) | [开发版](https://github.com/imsyy/SPlayer/actions) | [发行版](https://splayer.imsyy.top/download.html)
 
 <br />
-
-[![Stars](https://img.shields.io/github/stars/imsyy/SPlayer?style=flat)](https://github.com/imsyy/SPlayer/stargazers)
-[![Version](https://img.shields.io/github/v/release/imsyy/SPlayer)](https://github.com/imsyy/SPlayer/releases)
-[![Build Release](https://github.com/imsyy/SPlayer/actions/workflows/release.yml/badge.svg)](https://github.com/imsyy/SPlayer/actions/workflows/release.yml)
-[![License](https://img.shields.io/github/license/imsyy/SPlayer)](https://github.com/imsyy/SPlayer/blob/dev/LICENSE)
-[![Issues](https://img.shields.io/github/issues/imsyy/SPlayer)](https://github.com/imsyy/SPlayer/issues)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/imsyy/SPlayer)
 
 </div>
 
@@ -64,40 +58,6 @@
 ### 跳过原生模块构建
 
 默认会编译 `native/*` 下的原生模块（需要 Rust）。如果你的场景不需要原生能力，可设置 `SKIP_NATIVE_BUILD=true` 后再执行 `pnpm dev` / `pnpm build`。
-
-## 👀 Demo
-
-- 在线演示：[SPlayer](https://splayer.20100907.xyz)
-
-  > 如打不开，说明已经失效请自行前往 [获取](#️-获取)
-
-## 🎉 功能
-
-- ✨ 支持扫码登录
-- 📱 支持手机号登录
-- ~~📅 自动进行每日签到及云贝签到~~
-- 💻 支持桌面歌词
-- 💻 支持切换为本地播放器，此模式将不会连接网络
-- 🎨 封面主题色自适应，支持全站着色
-- 🌚 Light / Dark / Auto 模式自动切换
-- 📁 本地歌曲管理及分类（建议先使用 [音乐标签](https://www.cnblogs.com/vinlxc/p/11347744.html) 进行匹配后再使用）
-- 📁 本地音乐标签编辑及封面修改
-- ➕ 新建歌单及歌单编辑
-- ❤️ 收藏 / 取消收藏歌单或歌手
-- ☁️ 云盘音乐上传
-- 📂 云盘内歌曲播放
-- 🔄 云盘内歌曲纠正
-- 🗑️ 云盘歌曲删除
-- 🌐 支持 Subsonic / Navidrome 等流媒体服务（多服务器支持、自动连接）
-- 📝 支持逐字歌词
-- 🔄 歌词滚动以及歌词翻译
-- 📹 MV 与视频播放
-- 🎶 音乐频谱显示
-- ⏭️ 音乐渐入渐出
-- 🔄 支持 PWA
-- 💬 支持评论区
-- 🎵 支持 Last.fm Scrobble（播放记录上报）
-- 📱 移动端基础适配
 
 ## 🖼️ 界面展示
 
@@ -145,22 +105,6 @@
 
 </details>
 
-## 📦️ 获取
-
-### 二进制安装方案
-
-#### 稳定版
-
-通常情况下，可以在 [Releases](https://github.com/imsyy/SPlayer/releases) 中获取稳定版
-
-也可前往 [SPlayer 官网](https://splayer.imsyy.top/) 获取稳定版
-
-#### 开发版
-
-可以通过 GitHub Actions 工作流获取最新的开发版
-
-[Dev Workflow](https://github.com/imsyy/SPlayer/actions/workflows/dev.yml)
-
 ### 自行部署方案
 
 #### ⚙️ Docker 部署
@@ -169,7 +113,7 @@
 
 ##### 本地构建
 
-> 请尽量拉取最新分支后使用本地构建方式，在线部署的仓库可能更新不及时
+> 请拉取 Github 仓库文件后使用本地构建
 
 ```bash
 # 构建
@@ -182,62 +126,6 @@ docker-compose up -d
 ```
 
 Docker 镜像内包含网页端以及运行所需的服务，默认通过 `25884` 端口访问。
-
-##### 在线部署
-
-```bash
-# 从 Docker Hub 拉取
-docker pull imsyy/splayer:latest
-# 从 GitHub ghcr 拉取
-docker pull ghcr.io/imsyy/splayer:latest
-
-# 运行
-docker run -d --name SPlayer -p 25884:25884 imsyy/splayer:latest
-```
-
-以上步骤成功后，将会在本地 [localhost:25884](http://localhost:25884/) 启动，如需更换端口，请自行修改命令行中的第一个端口号
-
-#### ⚙️ Vercel 部署
-
-> 其他部署平台大致相同，在此不做说明
-
-1. 本程序依赖 [NeteaseCloudMusicApi](https://github.com/neteasecloudmusicapienhanced/api-enhanced) 运行，请确保您已成功部署该项目或兼容的项目，并成功取得在线访问地址
-2. 点击本仓库右上角的 `Fork`，复制本仓库到你的 `GitHub` 账号
-3. 复制 `/.env.example` 文件并重命名为 `/.env`
-4. 将 `.env` 文件中的 `VITE_API_URL` 改为第一步得到的 API 地址
-
-   ```js
-   VITE_API_URL = "https://example.com";
-   ```
-
-5. 将 `Build and Output Settings` 中的 `Output Directory` 改为 `out/renderer`
-
-   ![build](/screenshots/build.jpg)
-
-6. 点击 `Deploy`，即可成功部署
-
-#### ⚙️ 服务器部署
-
-1. 重复 `⚙️ Vercel 部署` 中的 1 - 4 步骤
-2. 克隆仓库
-
-   ```bash
-   git clone https://github.com/imsyy/SPlayer.git
-   ```
-
-3. 安装依赖
-
-   ```bash
-   pnpm install
-   ```
-
-4. 编译打包
-
-   ```bash
-   pnpm build
-   ```
-
-5. 将站点运行目录设置为 `out/renderer` 目录
 
 #### ⚙️ 本地部署
 
@@ -308,7 +196,3 @@ docker run -d --name SPlayer -p 25884:25884 imsyy/splayer:latest
   4. **免责声明：** 根据 AGPL-3.0，本项目不提供任何明示或暗示的担保。请详细阅读 [GNU Affero General Public License (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html) 以了解完整的免责声明内容
   5. **社区参与：** 欢迎社区的参与和贡献，我们鼓励开发者一同改进和维护本项目
   6. **许可证链接：** 请阅读 [GNU Affero General Public License (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html) 了解更多详情
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=imsyy/SPlayer&type=Date)](https://star-history.com/#imsyy/SPlayer&Date)
