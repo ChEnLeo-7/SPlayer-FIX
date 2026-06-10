@@ -5,7 +5,7 @@
 
 - ✨ 支持 Docker 部署的网页端解灰
 - 📱 更全的移动端UI适配
-- 👤 支持未登录下收藏歌手/专辑/歌单
+- 👤 支持未登录下收藏歌手/专辑/歌单，以及下载歌曲
 
 <div align="center">
 <img alt="logo" height="100" width="100" src="public/icons/favicon.png" />

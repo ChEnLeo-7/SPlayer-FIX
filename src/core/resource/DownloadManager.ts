@@ -9,6 +9,7 @@ import { songLevelData } from "@/utils/meta";
 import { getPlayerInfoObj } from "@/utils/format";
 import { LyricProcessor, type LyricProcessorOptions, type LyricResult } from "./LyricProcessor";
 import { albumDetail } from "@/api/album";
+import { isLogin } from "@/utils/auth";
 
 const albumArtistCache = new Map<number, string[] | Promise<string[]>>();
 const MAX_ALBUM_ARTIST_CACHE_SIZE = 100;
@@ -61,6 +62,7 @@ class SongDownloadStrategy implements DownloadStrategy {
   private ttmlLyric = "";
   private yrcLyric = "";
   private albumArtists: string[] = [];
+  private isUnlockDownload = false;
 
   constructor(
     public readonly song: SongType,
@@ -260,9 +262,10 @@ class SongDownloadStrategy implements DownloadStrategy {
   private async resolveUrl(): Promise<{ url: string; type: string }> {
     const usePlayback = this.settingStore.usePlaybackForDownload;
     const levelName = songLevelData[this.quality].level;
+    this.isUnlockDownload = false;
 
     // 尝试使用播放链接
-    if (usePlayback) {
+    if (usePlayback || !isLogin()) {
       try {
         const result = await songUrl(this.song.id, levelName as Parameters<typeof songUrl>[1]);
         if (result.code === 200 && result?.data?.[0]?.url) {
@@ -310,6 +313,7 @@ class SongDownloadStrategy implements DownloadStrategy {
               const unlockUrl = r.value?.result?.url;
               if (unlockUrl) {
                 const extensionMatch = unlockUrl.match(/\.([a-z0-9]+)(?:[?#]|$)/i);
+                this.isUnlockDownload = true;
                 return {
                   url: unlockUrl,
                   type: extensionMatch ? extensionMatch[1].toLowerCase() : "mp3",
@@ -348,7 +352,8 @@ class SongDownloadStrategy implements DownloadStrategy {
     const { fileNameFormat } = this.settingStore;
 
     let displayName = baseTitle;
-    if (fileNameFormat === "artist-title") displayName = `${safeArtist} - ${baseTitle}`;
+    if (this.isUnlockDownload) displayName = `${baseTitle} - ${safeArtist}`;
+    else if (fileNameFormat === "artist-title") displayName = `${safeArtist} - ${baseTitle}`;
     else if (fileNameFormat === "title-artist") displayName = `${baseTitle} - ${safeArtist}`;
 
     return displayName.replace(/[/:*?"<>|]/g, "&");
@@ -577,7 +582,19 @@ class DownloadManager {
       } else {
         // 浏览器端兜底处理
         if (!strategy.downloadUrl) throw new Error("Download URL missing");
-        saveAs(strategy.downloadUrl, config.fileName + "." + config.fileType);
+        const fileName = config.fileName + "." + config.fileType;
+        try {
+          const proxyUrl = strategy.downloadUrl.startsWith("http")
+            ? `/music/proxy?url=${strategy.downloadUrl}`
+            : strategy.downloadUrl;
+          const response = await fetch(proxyUrl);
+          if (!response.ok) throw new Error("下载失败");
+          const blob = await response.blob();
+          saveAs(blob, fileName);
+        } catch (error) {
+          console.error("Browser blob download failed, fallback to direct url:", error);
+          saveAs(strategy.downloadUrl, fileName);
+        }
         dataStore.removeDownloadingSong(strategy.id);
       }
     } catch (error: any) {

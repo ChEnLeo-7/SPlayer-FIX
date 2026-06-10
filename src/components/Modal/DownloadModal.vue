@@ -11,7 +11,7 @@
           {{
             isCloudSong && !isBatch
               ? "当前为云盘歌曲，下载的文件均为上传时的源文件"
-              : "本软件仅支持从官方途径合法合规的下载歌曲，并用于学习研究用途。本功能将严格按照相应账户的权限来提供基础的下载功能"
+              : downloadNotice
           }}
         </n-alert>
         <!-- 歌曲信息卡片（单个下载时显示） -->
@@ -80,6 +80,7 @@ import { songDetail } from "@/api/song";
 import { formatSongsList } from "@/utils/format";
 import { pick } from "lodash-es";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
+import { isLogin } from "@/utils/auth";
 
 const props = defineProps<{
   songs?: SongType[];
@@ -98,6 +99,11 @@ const songs = ref<SongType[]>(props.songs || []);
 
 const isBatch = computed(() => songs.value.length > 1);
 const isCloudSong = computed(() => songs.value.some((song) => song.pc));
+const downloadNotice = computed(() =>
+  isLogin()
+    ? "本软件仅支持从官方途径合法合规的下载歌曲，并用于学习研究用途。本功能将严格按照相应账户的权限来提供基础的下载功能"
+    : "未登录状态下仅支持下载可公开播放或接口可返回链接的歌曲，受版权、会员或付费权限限制的歌曲可能无法下载",
+);
 
 const selectedQuality = ref<SongLevelType>(props.quality || settingStore.downloadSongLevel || "h");
 const downloadPath = computed(() => settingStore.downloadPath);

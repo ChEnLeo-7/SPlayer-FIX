@@ -100,6 +100,11 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api/, "/api"),
           },
+          "/music": {
+            target: `http://127.0.0.1:${servePort}`,
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/music/, "/music"),
+          },
         },
       },
       preview: {
