@@ -271,6 +271,18 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
             ),
           children: [...likedPlaylist.value],
         },
+        {
+          key: "liked-albums",
+          show: likedAlbum.value.length > 0,
+          icon: statusStore.menuCollapsed ? renderIcon("Album") : undefined,
+          label: () =>
+            h(
+              "div",
+              { class: "user-list" },
+              h(NText, { depth: 3 }, () => ["收藏的专辑"]),
+            ),
+          children: [...likedAlbum.value],
+        },
       ]
     : [
         {
@@ -329,39 +341,49 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
 });
 
 // 生成歌单列表
-const renderPlaylist = (playlist: CoverType[], showCover: boolean) => {
-  if (!isLogin()) return [];
-  return playlist.map((playlist) => ({
-    key: playlist.id,
+const hasLoginAccount = computed(() => Boolean(isLogin() && dataStore.userData.userId));
+
+const renderCoverMenu = (list: CoverType[], showCover: boolean, type: "playlist" | "album") => {
+  const iconName = type === "album" ? "Album" : "PlayList";
+  return list.map((item) => ({
+    key: type === "album" ? `album-${item.id}` : item.id,
     label: () =>
       showCover
         ? h("div", { class: "pl-cover" }, [
             h(NAvatar, {
-              src: playlist.coverSize?.s || playlist.cover,
+              src: item.coverSize?.s || item.cover,
               fallbackSrc: "/images/album.jpg?asset",
               lazy: true,
             }),
-            h(NEllipsis, null, () => playlist.name),
+            h(NEllipsis, null, () => item.name),
           ])
-        : h(NEllipsis, null, () => playlist.name),
-    icon: showCover ? undefined : renderIcon("PlayList"),
+        : h(NEllipsis, null, () => item.name),
+    icon: showCover ? undefined : renderIcon(iconName),
   }));
 };
 
 // 创建的歌单
 const createPlaylist = computed<MenuOption[]>(() => {
+  if (!hasLoginAccount.value) return [];
   const userId = dataStore.userData.userId;
   const list = dataStore.userLikeData.playlists
     .filter((playlist) => playlist?.userId === userId)
     .slice(1);
-  return renderPlaylist(list, settingStore.menuShowCover);
+  return renderCoverMenu(list, settingStore.menuShowCover, "playlist");
 });
 
 // 收藏的歌单
 const likedPlaylist = computed<MenuOption[]>(() => {
+  if (!hasLoginAccount.value) {
+    return renderCoverMenu(dataStore.userLikeData.playlists, settingStore.menuShowCover, "playlist");
+  }
   const userId = dataStore.userData.userId;
   const list = dataStore.userLikeData.playlists.filter((playlist) => playlist?.userId !== userId);
-  return renderPlaylist(list, settingStore.menuShowCover);
+  return renderCoverMenu(list, settingStore.menuShowCover, "playlist");
+});
+
+const likedAlbum = computed<MenuOption[]>(() => {
+  return renderCoverMenu(dataStore.userLikeData.albums, settingStore.menuShowCover, "album");
 });
 
 // 本地歌单菜单
@@ -419,6 +441,11 @@ const menuUpdate = (key: string, item: MenuOption) => {
     router.push({
       name: "playlist",
       query: { id: item.key },
+    });
+  } else if (typeof key === "string" && key.startsWith("album-")) {
+    router.push({
+      name: "album",
+      query: { id: key.replace("album-", "") },
     });
   } else if (typeof key === "string" && key.startsWith("local-")) {
     // 检查是否为本地歌单（16位数字ID）
@@ -504,6 +531,19 @@ const checkMenuItem = () => {
       }
       break;
     }
+    case "album": {
+      const albumId = Number(router.currentRoute.value.query.id || 0);
+      const isLikedAlbum = dataStore.userLikeData.albums.some(
+        (album) => Number(album?.id) === albumId,
+      );
+      if (albumId && isLikedAlbum) {
+        menuActiveKey.value = `album-${albumId}`;
+        menuRef.value?.showOption(`album-${albumId}`);
+      } else {
+        menuActiveKey.value = "home";
+      }
+      break;
+    }
     default:
       menuActiveKey.value = routerName;
       break;
@@ -527,7 +567,7 @@ onMounted(() => {
 
 // 监听路由
 watch(
-  () => [router.currentRoute.value, dataStore.userLikeData.playlists],
+  () => [router.currentRoute.value, dataStore.userLikeData.playlists, dataStore.userLikeData.albums],
   () => checkMenuItem(),
 );
 </script>

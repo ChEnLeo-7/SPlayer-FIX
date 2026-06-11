@@ -17,6 +17,7 @@
  */
 "use strict";
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require("fs");
 const path = require("path");
 const yaml = require("js-yaml");
