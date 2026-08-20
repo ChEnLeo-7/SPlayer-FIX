@@ -1,8 +1,8 @@
 # build
 FROM node:22-alpine AS builder
 
-# install pnpm
-RUN npm install -g pnpm
+# 安装项目锁定版本的 pnpm
+RUN npm install -g pnpm@10.28.1
 
 WORKDIR /app
 
@@ -18,7 +18,8 @@ RUN [ ! -e ".env" ] && cp .env.example .env || true
 
 # skip native build for web deployment
 ENV SKIP_NATIVE_BUILD=true
-RUN npx electron-vite build
+ENV NODE_OPTIONS=--max-old-space-size=1536
+RUN pnpm exec electron-vite build
 
 # nginx
 FROM nginx:1.27-alpine-slim AS app
@@ -42,4 +43,4 @@ ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-CMD ["npx", "@neteasecloudmusicapienhanced/api"]
+CMD ["node", "/usr/local/lib/node_modules/@neteasecloudmusicapienhanced/api/app.js"]

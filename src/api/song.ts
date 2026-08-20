@@ -38,6 +38,7 @@ export const songUrl = (
     | "sky"
     | "dolby"
     | "jymaster" = "exhigh",
+  unblock: boolean = false,
 ) => {
   // 杜比全景声使用旧版接口，并传入特殊参数
   if (level === "dolby") {
@@ -47,6 +48,7 @@ export const songUrl = (
         id,
         br: 999000,
         immerseType: "c51",
+        ...(unblock ? { unblock: true } : {}),
         timestamp: Date.now(),
       },
     });
@@ -57,7 +59,7 @@ export const songUrl = (
     params: {
       id,
       level,
-      unblock: true,
+      ...(unblock ? { unblock: true } : {}),
       timestamp: Date.now(),
     },
   });

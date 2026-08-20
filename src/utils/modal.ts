@@ -4,7 +4,7 @@ import { NScrollbar } from "naive-ui";
 import { isLogin } from "./auth";
 import { canUseServerLocalFavorites } from "@/utils/localFavorites";
 import { isArray, isFunction } from "lodash-es";
-import { useDataStore, useSettingStore } from "@/stores";
+import { useSettingStore } from "@/stores";
 import router from "@/router";
 import type { StreamingServerConfig as StreamingServerConfigType } from "@/types/streaming";
 
@@ -293,14 +293,11 @@ export const openUpdatePlaylist = async (
 };
 
 // 下载歌曲
-export const openDownloadSong = async (song: SongType) => {
-  const dataStore = useDataStore();
-  // 是否可下载
-  if (!song) return window.$message.warning("请正确选择歌曲");
-  if (song.free !== 0 && dataStore.userData.vipType === 0 && !song?.pc) {
-    return window.$message.warning(
-      isLogin() ? "账号会员等级不足，请提升权限" : "未登录状态无法下载会员或付费歌曲",
-    );
+export const openDownloadSong = async (song: SongType): Promise<void> => {
+  // 允许未登录用户进入下载流程，由后续接口返回结果决定是否可下载
+  if (!song) {
+    window.$message.warning("请正确选择歌曲");
+    return;
   }
   const { default: DownloadModal } = await import("@/components/Modal/DownloadModal.vue");
   const modal = window.$modal.create({

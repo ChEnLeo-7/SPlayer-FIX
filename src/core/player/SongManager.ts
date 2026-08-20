@@ -231,11 +231,30 @@ class SongManager {
       }
     }
 
-    const res = await songUrl(id, level as any);
-    console.log(`🌐 ${id} music data:`, res);
+    let res = await songUrl(id, level as any, false);
+    console.log(`🌐 ${id} official music data:`, res);
 
     // 兼容新旧接口的数据结构
-    const songData = Array.isArray(res.data) ? res.data[0] : res.data?.[0];
+    let songData = Array.isArray(res.data) ? res.data[0] : res.data?.[0];
+
+    // 官方地址不可用时，再尝试解灰音源
+    const officialUrl = songData?.url;
+    const officialTrial = songData?.freeTrialInfo != null && songData.freeTrialInfo !== "null";
+    if (!this.isPlayableUrl(officialUrl) || (officialTrial && !settingStore.playSongDemo)) {
+      try {
+        const fallbackRes = await songUrl(id, level as any, true);
+        const fallbackData = Array.isArray(fallbackRes.data)
+          ? fallbackRes.data[0]
+          : fallbackRes.data?.[0];
+        if (this.isPlayableUrl(fallbackData?.url)) {
+          res = fallbackRes;
+          songData = fallbackData;
+          console.log(`🔓 ${id} fallback to unblock source`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ [${id}] 解灰音源请求失败`, error);
+      }
+    }
 
     // 是否有播放地址
     if (!songData || !this.isPlayableUrl(songData?.url)) return { id, url: undefined };
@@ -275,7 +294,7 @@ class SongManager {
     if (finalUrl) {
       this.triggerCacheDownload(id, finalUrl, quality);
     }
-    return { id, url: finalUrl, isTrial, quality };
+    return { id, url: finalUrl || undefined, isTrial, quality };
   };
 
   /**
