@@ -186,12 +186,11 @@ class SongManager {
   };
 
   /**
-   * 处理网页端跨域音频
+   * 返回音源地址
    * @param url 播放地址
    */
   private normalizePlayableUrl = (url: string): string => {
-    if (isElectron || !/^https?:\/\//.test(url)) return url;
-    return `/music/proxy?url=${url}`;
+    return url;
   };
 
   /**

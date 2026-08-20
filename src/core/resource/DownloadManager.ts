@@ -43,6 +43,9 @@ interface DownloadStrategy {
   // 执行阶段：返回给 Electron 下载器需要的配置对象
   getDownloadConfig(): DownloadConfig;
 
+  // 获取播放地址作为网页端下载回退
+  getPlaybackDownload(): Promise<{ url: string; type: string }>;
+
   // 收尾阶段：处理 ASS 生成，歌词文件写入
   postProcess(downloadedFilePath: string): Promise<void>;
 }
@@ -196,6 +199,19 @@ class SongDownloadStrategy implements DownloadStrategy {
       skipIfExist: true,
       threadCount: downloadThreadCount,
       enableDownloadHttp2: enableDownloadHttp2,
+    };
+  }
+
+  async getPlaybackDownload(): Promise<{ url: string; type: string }> {
+    const levelName = songLevelData[this.quality].level;
+    const result = await songUrl(this.song.id, levelName as Parameters<typeof songUrl>[1]);
+    const data = Array.isArray(result.data) ? result.data[0] : result.data?.[0];
+    if (result.code !== 200 || !data?.url) {
+      throw new Error("获取播放音源失败");
+    }
+    return {
+      url: data.url,
+      type: (data.type || data.encodeType || "mp3").toLowerCase(),
     };
   }
   /**
@@ -584,16 +600,29 @@ class DownloadManager {
         if (!strategy.downloadUrl) throw new Error("Download URL missing");
         const fileName = config.fileName + "." + config.fileType;
         try {
-          const proxyUrl = strategy.downloadUrl.startsWith("http")
-            ? `/music/proxy?url=${strategy.downloadUrl}`
-            : strategy.downloadUrl;
-          const response = await fetch(proxyUrl);
+          if (!/^https?:\/\//.test(strategy.downloadUrl)) {
+            saveAs(strategy.downloadUrl, fileName);
+            dataStore.removeDownloadingSong(strategy.id);
+            return;
+          }
+          // 仅允许直连音源，避免占用服务端上传带宽
+          const response = await fetch(strategy.downloadUrl);
           if (!response.ok) throw new Error("下载失败");
           const blob = await response.blob();
           saveAs(blob, fileName);
         } catch (error) {
-          console.error("Browser blob download failed, fallback to direct url:", error);
-          saveAs(strategy.downloadUrl, fileName);
+          console.warn("下载音源直连失败，尝试使用播放音源:", error);
+          const playback = await strategy.getPlaybackDownload();
+          const playbackFileName = config.fileName + "." + playback.type;
+          try {
+            const response = await fetch(playback.url);
+            if (!response.ok) throw new Error("播放音源下载失败");
+            const blob = await response.blob();
+            saveAs(blob, playbackFileName);
+          } catch (playbackError) {
+            console.warn("播放音源无法读取响应，改用浏览器直接下载:", playbackError);
+            saveAs(playback.url, playbackFileName);
+          }
         }
         dataStore.removeDownloadingSong(strategy.id);
       }

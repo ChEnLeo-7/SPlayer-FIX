@@ -25,6 +25,8 @@ export default defineConfig(({ mode }) => {
   const getEnv = (name: keyof MainEnv): string => {
     return loadEnv(mode, process.cwd())[name];
   };
+  // Docker 构建使用更低内存的压缩器
+  const isDockerBuild = process.env.DOCKER_BUILD === "true";
   // 获取端口
   const webPort: number = Number(getEnv("VITE_WEB_PORT") || 14558);
   const servePort: number = Number(getEnv("VITE_SERVER_PORT") || 25884);
@@ -111,7 +113,7 @@ export default defineConfig(({ mode }) => {
         port: webPort,
       },
       build: {
-        minify: "terser",
+        minify: isDockerBuild ? "esbuild" : "terser",
         publicDir: resolve(__dirname, "public"),
         rollupOptions: {
           input: {

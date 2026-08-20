@@ -18,6 +18,7 @@ RUN [ ! -e ".env" ] && cp .env.example .env || true
 
 # skip native build for web deployment
 ENV SKIP_NATIVE_BUILD=true
+ENV DOCKER_BUILD=true
 ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN pnpm exec electron-vite build
 
