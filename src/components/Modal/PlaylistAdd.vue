@@ -1,8 +1,8 @@
 <!-- 添加到歌单 -->
 <template>
   <div class="playlist-add">
-    <!-- 在线歌曲只能添加到在线歌单 -->
-    <template v-if="!isLocal">
+    <!-- 网易云歌单写入必须显式进入 -->
+    <template v-if="provider === 'netease'">
       <n-scrollbar style="max-height: 70vh">
         <n-list class="playlists-list" hoverable clickable>
           <!-- 新建歌单 -->
@@ -43,7 +43,7 @@
         </n-list>
       </n-scrollbar>
     </template>
-    <!-- 本地歌曲只能添加到本地歌单 -->
+    <!-- 默认添加到当前私人本地歌单 -->
     <template v-else>
       <n-scrollbar style="max-height: 70vh">
         <n-list class="playlists-list" hoverable clickable>
@@ -100,11 +100,10 @@ import { playlistTracks } from "@/api/playlist";
 import { debounce } from "lodash-es";
 import { isLogin, updateUserLikePlaylist, updateUserLikeSongs } from "@/utils/auth";
 import { openCreatePlaylist } from "@/utils/modal";
-import { addSongsToServerPlaylist, canUseServerLocalFavorites } from "@/utils/localFavorites";
 
 const props = defineProps<{
   data: SongType[];
-  isLocal: boolean;
+  provider: "private" | "netease";
 }>();
 
 const emit = defineEmits<{
@@ -120,7 +119,7 @@ const loadingMsg = ref<MessageReactive>();
 // 在线歌单
 const onlinePlaylists = computed(() => {
   return (
-    dataStore.userLikeData.playlists.filter(
+    dataStore.neteaseLikeData.playlists.filter(
       (playlist) => playlist.userId === dataStore.userData?.userId,
     ) || []
   );
@@ -162,20 +161,7 @@ const addToLocalPlaylist = debounce(
   async (playlistId: number) => {
     loadingMsg.value = window.$message.loading("正在添加歌曲至本地歌单", { duration: 0 });
     try {
-      if (canUseServerLocalFavorites()) {
-        const result = await addSongsToServerPlaylist(playlistId, props.data);
-        if (loadingMsg.value) loadingMsg.value.destroy();
-        emit("close");
-        if (result.addedCount > 0) {
-          window.$message.success(`成功添加 ${result.addedCount} 首歌曲至本地歌单`);
-        } else {
-          window.$message.info("所选歌曲已在歌单中");
-        }
-        return;
-      }
-      // 本地歌曲使用 id 的字符串形式
-      const songIds = props.data.map((item) => item.id.toString());
-      const result = await localStore.addSongsToLocalPlaylist(playlistId, songIds);
+      const result = await localStore.addSongsToPrivatePlaylist(playlistId, props.data);
       if (loadingMsg.value) loadingMsg.value.destroy();
       if (result.success) {
         emit("close");

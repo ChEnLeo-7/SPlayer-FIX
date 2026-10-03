@@ -44,6 +44,8 @@ export interface PlayOptions {
   fadeCurve?: FadeCurve;
   /** 初始播放位置（秒） */
   seek?: number;
+  /** Android 原生通知与播放所需的媒体信息 */
+  mediaItem?: AndroidMediaItem;
 }
 
 /**
@@ -238,3 +240,4 @@ export interface IPlaybackEngine {
   /** 引擎能力描述 */
   readonly capabilities: EngineCapabilities;
 }
+import type { AndroidMediaItem } from "@/types/android-media";

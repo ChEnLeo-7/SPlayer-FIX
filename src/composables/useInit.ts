@@ -1,12 +1,19 @@
 import { mediaSessionManager } from "@/core/player/MediaSessionManager";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
-import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
+import {
+  useAccountStore,
+  useDataStore,
+  useLocalStore,
+  useSettingStore,
+  useShortcutStore,
+  useStatusStore,
+} from "@/stores";
 import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
 import { isElectron, isMac } from "@/utils/env";
-import { canUseServerLocalFavorites, syncServerLocalFavorites } from "@/utils/localFavorites";
 import { printVersion } from "@/utils/log";
 import { openUserAgreement } from "@/utils/modal";
+import { exportPreferencesSnapshot } from "@/utils/accountPreferences";
 import { useEventListener } from "@vueuse/core";
 import { debounce } from "lodash-es";
 import { onMounted, watch } from "vue";
@@ -23,6 +30,8 @@ export const useInit = () => {
   const statusStore = useStatusStore();
   const settingStore = useSettingStore();
   const shortcutStore = useShortcutStore();
+  const accountStore = useAccountStore();
+  const localStore = useLocalStore();
 
   const player = usePlayerController();
   const downloadManager = useDownloadManager();
@@ -39,7 +48,25 @@ export const useInit = () => {
     openUserAgreement();
     // 加载数据
     await dataStore.loadData();
-    if (canUseServerLocalFavorites()) await syncServerLocalFavorites();
+    await localStore.readLocalPlaylists();
+    await accountStore.restoreSession();
+    if (accountStore.status === "locked") {
+      window.$message.warning("SPlayer 账户已锁定，请输入密码解锁");
+    }
+    watch(
+      () => [
+        dataStore.userLikeData,
+        dataStore.likeSongsList,
+        dataStore.historyList,
+        dataStore.playList,
+        dataStore.originalPlayList,
+        localStore.localPlaylists,
+        localStore.playlistSongs,
+        exportPreferencesSnapshot(settingStore.$state, statusStore.$state, shortcutStore.$state),
+      ],
+      () => accountStore.scheduleSync(),
+      { deep: true },
+    );
     // 初始化 MediaSession
     mediaSessionManager.init();
     // 初始化播放器

@@ -1,7 +1,7 @@
 <template>
   <div class="like-type">
     <CoverList
-      :data="dataStore.userLikeData.djs"
+      :data="dataStore.neteaseLikeData.djs"
       type="radio"
       :hiddenCover="settingStore.hiddenCovers.like"
     />

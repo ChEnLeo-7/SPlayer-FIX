@@ -12,7 +12,7 @@ import type { RepeatModeType, ShuffleModeType } from "@/types/shared/play-mode";
 import { isDevBuild } from "@/utils/env";
 import { defineStore } from "pinia";
 
-interface StatusState {
+export interface StatusState {
   /** 菜单折叠状态 */
   menuCollapsed: boolean;
   /** 搜索框状态 */
@@ -169,89 +169,91 @@ interface StatusState {
   songCommentCount: number;
 }
 
+export const createDefaultStatusState = (): StatusState => ({
+  menuCollapsed: false,
+  searchFocus: false,
+  searchInputValue: "",
+  backgroundImageUrl: null,
+  showPlayBar: true,
+  playStatus: false,
+  playLoading: true,
+  playListShow: false,
+  showFullPlayer: false,
+  playerMetaShow: true,
+  currentTime: 0,
+  duration: 0,
+  progress: 0,
+  currentTimeOffsetMap: {},
+  songCoverTheme: {},
+  pureLyricMode: false,
+  usingTTMLLyric: false,
+  usingQRCLyric: false,
+  songQuality: undefined,
+  audioSource: undefined,
+  playIndex: -1,
+  lyricIndex: -1,
+  lyricLoading: false,
+  playRate: 1,
+  playVolume: 0.7,
+  playVolumeMute: 0,
+  repeatMode: "off",
+  shuffleMode: "off",
+  personalFmMode: false,
+  mainContentHeight: 0,
+  listSortField: "default",
+  listSortOrder: "default",
+  showDesktopLyric: false,
+  showTaskbarLyric: false,
+  showPlayerComment: false,
+  updateCheck: false,
+  updateAvailable: false,
+  updateInfo: null,
+  updateDownloaded: false,
+  updateDownloading: false,
+  updateDownloadProgress: 0,
+  eqEnabled: false,
+  eqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  eqPreset: "acoustic",
+  autoClose: {
+    enable: false,
+    time: 30,
+    remainTime: 0,
+    endTime: 0,
+    waitSongEnd: true,
+  },
+  developerMode: false,
+  themeBackgroundMode: "color",
+  /** 背景图配置 */
+  backgroundConfig: {
+    /** 背景放大倍数 (1-2) */
+    scale: 1,
+    /** 遮罩透明度 (30-95) */
+    maskOpacity: 30,
+    /** 模糊度 (0-20) */
+    blur: 0,
+    /** 提取的主色 (hex) */
+    themeColor: null,
+    /** 是否使用自定义颜色 */
+    useCustomColor: false,
+    /** 用户自定义颜色 (hex) */
+    customColor: "#fe7971",
+    /** 是否为纯色模式 */
+    isSolid: false,
+  },
+  availableQualities: [],
+  abLoop: {
+    enable: false,
+    pointA: null,
+    pointB: null,
+  },
+  playlistMode: "online",
+  automixFxSeq: 0,
+  automixEndedSeq: 0,
+  songCommentCount: 0,
+});
+
 export const useStatusStore = defineStore("status", {
-  state: (): StatusState => ({
-    menuCollapsed: false,
-    searchFocus: false,
-    searchInputValue: "",
-    backgroundImageUrl: null,
-    showPlayBar: true,
-    playStatus: false,
-    playLoading: true,
-    playListShow: false,
-    showFullPlayer: false,
-    playerMetaShow: true,
-    currentTime: 0,
-    duration: 0,
-    progress: 0,
-    currentTimeOffsetMap: {},
-    songCoverTheme: {},
-    pureLyricMode: false,
-    usingTTMLLyric: false,
-    usingQRCLyric: false,
-    songQuality: undefined,
-    audioSource: undefined,
-    playIndex: -1,
-    lyricIndex: -1,
-    lyricLoading: false,
-    playRate: 1,
-    playVolume: 0.7,
-    playVolumeMute: 0,
-    repeatMode: "off",
-    shuffleMode: "off",
-    personalFmMode: false,
-    mainContentHeight: 0,
-    listSortField: "default",
-    listSortOrder: "default",
-    showDesktopLyric: false,
-    showTaskbarLyric: false,
-    showPlayerComment: false,
-    updateCheck: false,
-    updateAvailable: false,
-    updateInfo: null,
-    updateDownloaded: false,
-    updateDownloading: false,
-    updateDownloadProgress: 0,
-    eqEnabled: false,
-    eqBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    eqPreset: "acoustic",
-    autoClose: {
-      enable: false,
-      time: 30,
-      remainTime: 0,
-      endTime: 0,
-      waitSongEnd: true,
-    },
-    developerMode: false,
-    themeBackgroundMode: "color",
-    /** 背景图配置 */
-    backgroundConfig: {
-      /** 背景放大倍数 (1-2) */
-      scale: 1,
-      /** 遮罩透明度 (30-95) */
-      maskOpacity: 30,
-      /** 模糊度 (0-20) */
-      blur: 0,
-      /** 提取的主色 (hex) */
-      themeColor: null,
-      /** 是否使用自定义颜色 */
-      useCustomColor: false,
-      /** 用户自定义颜色 (hex) */
-      customColor: "#fe7971",
-      /** 是否为纯色模式 */
-      isSolid: false,
-    },
-    availableQualities: [],
-    abLoop: {
-      enable: false,
-      pointA: null,
-      pointB: null,
-    },
-    playlistMode: "online",
-    automixFxSeq: 0,
-    automixEndedSeq: 0,
-    songCommentCount: 0,
-  }),
+  state: createDefaultStatusState,
   getters: {
     // 播放音量图标
     playVolumeIcon(state) {

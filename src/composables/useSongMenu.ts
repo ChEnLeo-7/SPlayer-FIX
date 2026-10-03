@@ -15,6 +15,7 @@ import {
   openCloudMatch,
   openCopySongInfo,
   openDownloadSong,
+  openNeteasePlaylistAdd,
   openPlaylistAdd,
   openSongInfoEditor,
 } from "@/utils/modal";
@@ -167,8 +168,9 @@ export const useSongMenu = () => {
     playListId: number = 0,
     isDailyRecommend: boolean = false,
     emit?: (event: "removeSong", args: any[]) => void,
+    isPrivateFavorites: boolean = false,
   ): DropdownOption[] => {
-    const userPlaylistsData = dataStore.userLikeData.playlists?.filter(
+    const userPlaylistsData = dataStore.neteaseLikeData.playlists?.filter(
       (pl) => pl.userId === dataStore.userData.userId,
     );
     const type = song.type || "song";
@@ -179,7 +181,9 @@ export const useSongMenu = () => {
     const isCurrent = isSameSong(musicStore.playSong, song);
     const isLocalPlaylist = localStore.isLocalPlaylist(playListId);
     const isUserPlaylist =
-      (!!playListId && userPlaylistsData.some((pl) => pl.id === playListId)) || isLocalPlaylist;
+      (!!playListId && userPlaylistsData.some((pl) => pl.id === playListId)) ||
+      isLocalPlaylist ||
+      isPrivateFavorites;
     const isDownloading = dataStore.downloadingSongs.some((item) => item.song.id === song.id);
 
     return [
@@ -203,12 +207,25 @@ export const useSongMenu = () => {
       },
       {
         key: "playlist-add",
-        label: "添加到歌单",
-        show: settingStore.contextMenuOptions.addToPlaylist && type !== "streaming",
+        label: "添加到私人歌单",
+        show: settingStore.contextMenuOptions.addToPlaylist,
         props: {
-          onClick: () => openPlaylistAdd([song], isLocal),
+          onClick: () => openPlaylistAdd([song]),
         },
         icon: renderIcon("AddList", { size: 18 }),
+      },
+      {
+        key: "netease-playlist-add",
+        label: "添加到网易云歌单",
+        show:
+          settingStore.contextMenuOptions.addToPlaylist &&
+          isLoginNormal &&
+          type === "song" &&
+          !isLocal,
+        props: {
+          onClick: () => openNeteasePlaylistAdd([song]),
+        },
+        icon: renderIcon("Cloud", { size: 18 }),
       },
       {
         key: "mv",
@@ -335,14 +352,25 @@ export const useSongMenu = () => {
           settingStore.contextMenuOptions.deleteFromPlaylist &&
           emit !== undefined &&
           isUserPlaylist &&
-          (isLocalPlaylist || isLoginNormal) &&
+          (isPrivateFavorites || isLocalPlaylist || isLoginNormal) &&
           !isCloud,
         props: {
-          onClick: () =>
-            deleteSongs(playListId!, [song.id], {
+          onClick: () => {
+            if (isPrivateFavorites) {
+              window.$dialog.warning({
+                title: "取消喜欢",
+                content: `确定从我喜欢的音乐中移除 ${song.name} 吗？`,
+                positiveText: "移除",
+                negativeText: "取消",
+                onPositiveClick: () => emit?.("removeSong", [song.id]),
+              });
+              return;
+            }
+            deleteSongs(playListId, [song.id], {
               callback: () => emit?.("removeSong", [song.id]),
               songName: song.name,
-            }),
+            });
+          },
         },
         icon: renderIcon("Delete"),
       },

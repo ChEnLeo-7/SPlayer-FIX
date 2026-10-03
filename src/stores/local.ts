@@ -1,6 +1,8 @@
 import type { SongType, LocalPlaylistType } from "@/types/main";
+import type { LocalScopeSnapshot } from "@/types/account";
 import { cloneDeep } from "lodash-es";
 import localforage from "localforage";
+import { getStartupGuestSnapshot } from "@/utils/accountScope";
 
 // localDB
 const localDB = localforage.createInstance({
@@ -30,6 +32,8 @@ const createLocalStore = () => {
   const localSongs = ref<SongType[]>([]);
   // 本地歌单
   const localPlaylists = ref<LocalPlaylistType[]>([]);
+  // 私人歌单中的在线歌曲详情
+  const playlistSongs = ref<SongType[]>([]);
   // 是否初始化完成
   const isInitialized = ref(false);
 
@@ -112,7 +116,9 @@ const createLocalStore = () => {
     }
 
     const firstSongId = playlist.songs[0];
-    const firstSong = localSongs.value.find((s) => s.id.toString() === firstSongId);
+    const firstSong = [...localSongs.value, ...playlistSongs.value].find(
+      (song) => String(song.id) === firstSongId,
+    );
     if (firstSong?.cover) {
       const base64Cover = await fetchCoverAsBase64(firstSong.cover);
       if (base64Cover) {
@@ -124,8 +130,23 @@ const createLocalStore = () => {
   // 读取本地歌单列表
   const readLocalPlaylists = async (): Promise<LocalPlaylistType[]> => {
     try {
-      const result = await localDB.getItem("local-playlists");
+      const [result, storedPlaylistSongs] = await Promise.all([
+        localDB.getItem("local-playlists"),
+        localDB.getItem("private-playlist-songs"),
+      ]);
       localPlaylists.value = (result as LocalPlaylistType[]) || [];
+      playlistSongs.value = (storedPlaylistSongs as SongType[]) || [];
+      const guestSnapshot = await getStartupGuestSnapshot();
+      if (guestSnapshot) {
+        const guestPlaylists = cloneDeep(guestSnapshot.local.localPlaylists);
+        const guestPlaylistSongs = cloneDeep(guestSnapshot.local.playlistSongs || []);
+        localPlaylists.value = guestPlaylists;
+        playlistSongs.value = guestPlaylistSongs;
+        await Promise.all([
+          localDB.setItem("local-playlists", guestPlaylists),
+          localDB.setItem("private-playlist-songs", guestPlaylistSongs),
+        ]);
+      }
       isInitialized.value = true;
       return localPlaylists.value;
     } catch (error) {
@@ -142,6 +163,22 @@ const createLocalStore = () => {
       console.error("Error saving local playlists:", error);
       throw error;
     }
+  };
+
+  /** 导出账户作用域数据 */
+  const exportAccountSnapshot = (): LocalScopeSnapshot => ({
+    localPlaylists: cloneDeep(toRaw(localPlaylists.value)),
+    playlistSongs: cloneDeep(toRaw(playlistSongs.value)),
+  });
+
+  /** 应用并持久化账户作用域数据 */
+  const applyAccountSnapshot = async (snapshot: LocalScopeSnapshot): Promise<void> => {
+    localPlaylists.value = cloneDeep(snapshot.localPlaylists);
+    playlistSongs.value = cloneDeep(snapshot.playlistSongs || []);
+    await Promise.all([
+      saveLocalPlaylists(),
+      localDB.setItem("private-playlist-songs", cloneDeep(playlistSongs.value)),
+    ]);
   };
 
   // 创建本地歌单
@@ -212,6 +249,29 @@ const createLocalStore = () => {
     return { success: true, addedCount: newIds.length };
   };
 
+  /** 添加歌曲详情到私人歌单 */
+  const addSongsToPrivatePlaylist = async (
+    playlistId: number,
+    songs: SongType[],
+  ): Promise<{ success: boolean; addedCount: number }> => {
+    const result = await addSongsToLocalPlaylist(
+      playlistId,
+      songs.map((song) => String(song.id)),
+    );
+    if (!result.success) return result;
+
+    const songMap = new Map(playlistSongs.value.map((song) => [String(song.id), song]));
+    for (const song of songs) songMap.set(String(song.id), cloneDeep(toRaw(song)));
+    playlistSongs.value = [...songMap.values()];
+    const playlist = localPlaylists.value.find((item) => item.id === playlistId);
+    if (playlist && result.addedCount > 0) await updatePlaylistCover(playlist, true);
+    await Promise.all([
+      localDB.setItem("private-playlist-songs", cloneDeep(playlistSongs.value)),
+      saveLocalPlaylists(),
+    ]);
+    return result;
+  };
+
   // 从本地歌单移除歌曲
   const removeSongsFromLocalPlaylist = async (
     playlistId: number,
@@ -243,7 +303,9 @@ const createLocalStore = () => {
     if (!playlist) return null;
 
     // 根据歌单中的歌曲ID获取完整歌曲信息
-    const songsMap = new Map(localSongs.value.map((s) => [s.id.toString(), s]));
+    const songsMap = new Map(
+      [...localSongs.value, ...playlistSongs.value].map((song) => [String(song.id), song]),
+    );
     const songs = playlist.songs
       .map((songId) => songsMap.get(songId))
       .filter((s): s is SongType => s !== undefined);
@@ -294,15 +356,19 @@ const createLocalStore = () => {
   return reactive({
     localSongs,
     localPlaylists,
+    playlistSongs,
     isInitialized,
     readLocalSong,
     updateLocalSong,
     deleteLocalSong,
     readLocalPlaylists,
+    exportAccountSnapshot,
+    applyAccountSnapshot,
     createLocalPlaylist,
     updateLocalPlaylist,
     deleteLocalPlaylist,
     addSongsToLocalPlaylist,
+    addSongsToPrivatePlaylist,
     removeSongsFromLocalPlaylist,
     reorderSongsInLocalPlaylist,
     getLocalPlaylistDetail,

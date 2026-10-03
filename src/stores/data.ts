@@ -10,10 +10,11 @@ import type {
   SongLevelType,
   AccountType,
 } from "@/types/main";
+import type { DataScopeSnapshot } from "@/types/account";
 import { playlistCatlist } from "@/api/playlist";
 import { cloneDeep, isEmpty } from "lodash-es";
-import { isLogin } from "@/utils/auth";
 import { formatCategoryList } from "@/utils/format";
+import { getStartupGuestSnapshot } from "@/utils/accountScope";
 import localforage from "localforage";
 
 interface ListState {
@@ -28,6 +29,7 @@ interface ListState {
   userData: UserDataType;
   userList: AccountType[];
   userLikeData: UserLikeDataType;
+  neteaseLikeData: UserLikeDataType;
   likeSongsList: {
     detail: CoverType;
     data: SongType[];
@@ -67,6 +69,13 @@ const musicDB = localforage.createInstance({
 const userDB = localforage.createInstance({
   name: "user-data",
   description: "User data of the application",
+  storeName: "user",
+});
+
+// 网易云收藏缓存
+const neteaseUserDB = localforage.createInstance({
+  name: "netease-user-data",
+  description: "Netease provider data of the application",
   storeName: "user",
 });
 
@@ -113,6 +122,15 @@ export const useDataStore = defineStore("data", {
       mvs: [],
       djs: [],
     },
+    // 网易云收藏缓存，不进入 SPlayer 账户保险库
+    neteaseLikeData: {
+      songs: [],
+      playlists: [],
+      artists: [],
+      albums: [],
+      mvs: [],
+      djs: [],
+    },
     // 我喜欢的音乐
     likeSongsList: {
       detail: {
@@ -136,6 +154,35 @@ export const useDataStore = defineStore("data", {
     isLikeSong: (state) => (id: number) => state.userLikeData.songs.includes(id),
   },
   actions: {
+    /** 导出账户作用域数据 */
+    exportAccountSnapshot(): DataScopeSnapshot {
+      return cloneDeep({
+        userLikeData: toRaw(this.userLikeData),
+        likeSongsList: toRaw(this.likeSongsList),
+        historyList: toRaw(this.historyList),
+        playList: toRaw(this.playList),
+        originalPlayList: toRaw(this.originalPlayList),
+      });
+    },
+    /** 应用并持久化账户作用域数据 */
+    async applyAccountSnapshot(snapshot: DataScopeSnapshot): Promise<void> {
+      const data = cloneDeep(snapshot);
+      this.userLikeData = data.userLikeData;
+      this.likeSongsList = {
+        detail: data.likeSongsList.detail,
+        data: markRaw(data.likeSongsList.data),
+      };
+      this.historyList = markRaw(data.historyList);
+      this.playList = markRaw(data.playList);
+      this.originalPlayList = markRaw(data.originalPlayList);
+      await Promise.all([
+        ...Object.entries(data.userLikeData).map(([key, value]) => userDB.setItem(key, value)),
+        musicDB.setItem("likeSongsList", data.likeSongsList),
+        musicDB.setItem("historyList", data.historyList),
+        musicDB.setItem("playList", data.playList),
+        musicDB.setItem("originalPlayList", data.originalPlayList),
+      ]);
+    },
     /**
      * 加载数据
      */
@@ -179,6 +226,24 @@ export const useDataStore = defineStore("data", {
             this.userLikeData[key] = data;
           }),
         );
+
+        // 获取网易云 provider 缓存
+        const neteaseDataKeys = await neteaseUserDB.keys();
+        await Promise.all(
+          neteaseDataKeys.map(async (key) => {
+            if (!(key in this.neteaseLikeData)) return;
+            const data = await neteaseUserDB.getItem(key);
+            const userDataKey = key as UserDataKeys;
+            this.neteaseLikeData = {
+              ...this.neteaseLikeData,
+              [userDataKey]: data || [],
+            };
+          }),
+        );
+
+        // 上次为账号作用域时，在首次渲染前恢复 Guest
+        const guestSnapshot = await getStartupGuestSnapshot();
+        if (guestSnapshot) await this.applyAccountSnapshot(guestSnapshot.data);
       } catch (error) {
         console.error("Error loading data from localforage:", error);
       }
@@ -311,19 +376,23 @@ export const useDataStore = defineStore("data", {
      * @param data 歌曲列表
      */
     async setLikeSongsList(detail: CoverType, data: SongType[]) {
+      const songs = data.map((song) => song.id);
       const listData = {
-        detail: { ...detail },
+        detail: { ...detail, count: data.length },
         data: toRaw(data),
       };
-      this.likeSongsList = { detail: detail, data: markRaw(data) };
-      await musicDB.setItem("likeSongsList", cloneDeep(toRaw(listData)));
+      await Promise.all([
+        userDB.setItem("songs", cloneDeep(songs)),
+        musicDB.setItem("likeSongsList", cloneDeep(toRaw(listData))),
+      ]);
+      this.userLikeData.songs = songs;
+      this.likeSongsList = { detail: listData.detail, data: markRaw(data) };
     },
     /**
      * 获取我喜欢的歌单数据
      * @returns 我喜欢的歌单数据
      */
     async getUserLikePlaylist() {
-      if (!isLogin() || !this.userData.userId) return;
       const result = await musicDB.getItem("likeSongsList");
       return result as { detail: CoverType; data: SongType[] } | null;
     },
@@ -352,6 +421,14 @@ export const useDataStore = defineStore("data", {
         throw error;
       }
     },
+    /** 设置网易云收藏缓存 */
+    async setNeteaseLikeData<K extends UserDataKeys>(
+      name: K,
+      data: ListState["neteaseLikeData"][K],
+    ): Promise<void> {
+      await neteaseUserDB.setItem(name, cloneDeep(toRaw(data)));
+      this.neteaseLikeData[name] = data;
+    },
     /**
      * 清除用户数据
      */
@@ -366,10 +443,9 @@ export const useDataStore = defineStore("data", {
           name: "",
         };
         await Promise.all(
-          Object.keys(this.userLikeData).map(async (key) => {
+          Object.keys(this.neteaseLikeData).map(async (key) => {
             const userDataKey = key as UserDataKeys;
-            await this.setUserLikeData(userDataKey, []);
-            this.userLikeData[userDataKey] = [];
+            await this.setNeteaseLikeData(userDataKey, []);
           }),
         );
       } catch (error) {
@@ -390,6 +466,7 @@ export const useDataStore = defineStore("data", {
         }
         await musicDB.clear();
         await userDB.clear();
+        await neteaseUserDB.clear();
         console.log("All databases cleared");
       } catch (error) {
         console.error("Error deleting database:", error);

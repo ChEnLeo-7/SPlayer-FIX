@@ -356,11 +356,11 @@ const handleTabChange = (value: "songs" | "comments") => {
     transition:
       height 0.3s,
       opacity 0.3s;
-      .cover {
-        position: relative;
-        display: flex;
-        width: auto;
-        height: 100%;
+    .cover {
+      position: relative;
+      display: flex;
+      width: auto;
+      height: 100%;
       aspect-ratio: 1/1;
       margin-right: 20px;
       border-radius: 8px;

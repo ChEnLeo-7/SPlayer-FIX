@@ -35,8 +35,10 @@
       <SearchInp v-if="settingStore.useOnlineService" />
       <!-- 可拖拽 -->
       <div v-if="isDesktop" class="nav-drag" />
-      <n-flex align="center">
-        <!-- 用户 -->
+      <n-flex :wrap="false" align="center" class="nav-actions" size="small">
+        <!-- SPlayer 账户 -->
+        <SPlayerAccount />
+        <!-- 网易云用户 -->
         <User v-if="settingStore.useOnlineService" />
         <!-- 设置菜单 -->
         <n-dropdown :options="setOptions" trigger="click" @select="setSelect">
@@ -305,11 +307,12 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .nav {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 70px;
-  padding: 0 1rem;
+  height: calc(70px + var(--safe-area-inset-top));
+  padding: var(--safe-area-inset-top) 1rem 0;
   background-color: transparent;
   -webkit-app-region: drag;
   .n-button {
@@ -362,6 +365,37 @@ onMounted(async () => {
     }
   }
 }
+
+@media (max-width: 768px) {
+  .nav {
+    align-items: flex-start;
+    height: calc(126px + var(--safe-area-inset-top));
+    padding: var(--safe-area-inset-top) 1rem 0;
+    .page-control,
+    .nav-main {
+      height: 62px;
+    }
+    .page-control {
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .nav-main {
+      position: static;
+      min-width: 0;
+      margin-left: 8px;
+      .nav-actions {
+        flex-shrink: 0;
+      }
+      :deep(.search) {
+        right: 1rem;
+        bottom: 12px;
+        left: 1rem;
+        width: auto;
+      }
+    }
+  }
+}
+
 .tip {
   font-size: 16px;
 }

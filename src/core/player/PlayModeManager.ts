@@ -143,8 +143,7 @@ export class PlayModeManager {
     try {
       let pid = Number(musicStore.playPlaylistId);
       if (!pid) {
-        const likedPlaylist = await dataStore.getUserLikePlaylist();
-        pid = likedPlaylist?.detail?.id ? Number(likedPlaylist.detail.id) : 0;
+        pid = Number(dataStore.neteaseLikeData.playlists[0]?.id || 0);
       }
       // 获取当前歌曲ID，强制转换为数字
       let currentSongId: number;
@@ -154,10 +153,13 @@ export class PlayModeManager {
         const parsed = parseInt(rawId, 10);
         if (Number.isNaN(parsed) || parsed <= 0) {
           // 无法解析为有效数字ID，使用喜欢列表中的随机歌曲ID
-          const likePlaylist = await dataStore.getUserLikePlaylist();
-          if (likePlaylist?.data && likePlaylist.data.length > 0) {
-            const randomIndex = Math.floor(Math.random() * likePlaylist.data.length);
-            currentSongId = likePlaylist.data[randomIndex].id as number;
+          const likeSongs = dataStore.neteaseLikeData.songs;
+          if (likeSongs.length > 0) {
+            const randomIndex = Math.floor(Math.random() * likeSongs.length);
+            currentSongId = Number(likeSongs[randomIndex]);
+            if (!Number.isSafeInteger(currentSongId) || currentSongId <= 0) {
+              throw new Error("网易云喜欢列表中的歌曲 ID 无效");
+            }
           } else {
             throw new Error("无法获取有效的歌曲ID，请确保喜欢列表中有歌曲");
           }
@@ -168,10 +170,13 @@ export class PlayModeManager {
         currentSongId = rawId;
       } else {
         // 无效ID，使用喜欢列表中的随机歌曲ID
-        const likePlaylist = await dataStore.getUserLikePlaylist();
-        if (likePlaylist?.data && likePlaylist.data.length > 0) {
-          const randomIndex = Math.floor(Math.random() * likePlaylist.data.length);
-          currentSongId = likePlaylist.data[randomIndex].id as number;
+        const likeSongs = dataStore.neteaseLikeData.songs;
+        if (likeSongs.length > 0) {
+          const randomIndex = Math.floor(Math.random() * likeSongs.length);
+          currentSongId = Number(likeSongs[randomIndex]);
+          if (!Number.isSafeInteger(currentSongId) || currentSongId <= 0) {
+            throw new Error("网易云喜欢列表中的歌曲 ID 无效");
+          }
         } else {
           throw new Error("无法获取有效的歌曲ID，请确保喜欢列表中有歌曲");
         }

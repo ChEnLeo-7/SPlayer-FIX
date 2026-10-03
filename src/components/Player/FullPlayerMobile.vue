@@ -250,8 +250,17 @@ const contentTransform = computed(() => {
 
 <style lang="scss" scoped>
 .full-player-mobile {
+  --safe-area-top: var(--safe-area-inset-top);
+  --safe-area-bottom: var(--safe-area-inset-bottom);
+  --page-inline-space: 24px;
+  --top-bar-height: 52px;
+  --pagination-space: 44px;
+  --section-gap: 18px;
+  --cover-min-size: 180px;
+
   width: 100%;
   height: 100%;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -259,12 +268,12 @@ const contentTransform = computed(() => {
   .top-bar {
     position: absolute;
     width: 100%;
-    height: 60px;
+    height: calc(var(--top-bar-height) + var(--safe-area-top));
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 0 24px;
+    padding: var(--safe-area-top) var(--page-inline-space) 0;
     z-index: 10;
     .btn {
       width: 40px;
@@ -290,6 +299,7 @@ const contentTransform = computed(() => {
     display: flex;
     width: 200%;
     height: 100%;
+    min-height: 0;
     transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
     &.swiping {
       transition: none;
@@ -297,44 +307,53 @@ const contentTransform = computed(() => {
     .page {
       width: 50%;
       height: 100%;
+      min-height: 0;
       flex-shrink: 0;
       position: relative;
     }
     .info-page {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 0 24px 40px 24px;
+      display: grid;
+      grid-template-rows: minmax(var(--cover-min-size), 1fr) auto;
+      align-items: stretch;
+      padding: calc(var(--safe-area-top) + var(--top-bar-height)) var(--page-inline-space)
+        calc(var(--safe-area-bottom) + var(--pagination-space));
       overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: none;
+      &::-webkit-scrollbar {
+        display: none;
+      }
       .cover-section {
-        flex: 1;
+        container-type: size;
+        min-height: var(--cover-min-size);
         width: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-top: 60px;
-        margin-bottom: 20px;
+        padding: 8px 0 18px;
         :deep(.player-cover) {
-          width: min(100%, 45vh);
-          // height: min(85vw, 45vh);
+          width: min(100%, 45dvh);
+          height: auto;
+          max-width: 100%;
+          max-height: 100%;
+          @supports (width: 1cqb) {
+            width: min(100cqi, 100cqb, 45dvh);
+          }
           &.record {
-            width: 40vh;
+            width: min(100%, 40dvh);
+            height: auto;
+            margin-bottom: 0;
+            @supports (width: 1cqb) {
+              width: min(100cqi, 100cqb, 40dvh);
+            }
             .cover-img {
-              width: 40vh;
-              height: 40vh;
-              min-width: 40vh;
+              width: 100%;
+              height: 100%;
+              min-width: 0;
             }
             .pointer {
-              width: 10vh;
-              top: -9.5vh;
-            }
-            @media (max-width: 512px) {
-              width: 36vh;
-              .cover-img {
-                width: 36vh;
-                height: 36vh;
-                min-width: 36vh;
-              }
+              width: 30%;
+              top: -22%;
             }
           }
         }
@@ -343,11 +362,12 @@ const contentTransform = computed(() => {
         width: 100%;
         display: flex;
         flex-direction: column;
+        gap: var(--section-gap);
         .song-info-bar {
           width: 100%;
           display: flex;
+          align-items: flex-start;
           justify-content: space-between;
-          margin-bottom: 24px;
           .info-section {
             flex: 1;
             min-width: 0;
@@ -355,6 +375,7 @@ const contentTransform = computed(() => {
             :deep(.mobile-data) {
               width: 100%;
               max-width: 100%;
+              margin-top: 0;
               .name {
                 margin-left: 0;
               }
@@ -362,7 +383,6 @@ const contentTransform = computed(() => {
           }
           .info-actions {
             display: flex;
-            padding-top: 24px;
             gap: 16px;
             flex-shrink: 0;
             .action-btn {
@@ -394,7 +414,7 @@ const contentTransform = computed(() => {
         .progress-section {
           display: flex;
           align-items: center;
-          margin: 0 4px 30px;
+          margin: 0 4px;
           .time {
             font-size: 12px;
             opacity: 0.6;
@@ -410,7 +430,7 @@ const contentTransform = computed(() => {
         .control-section {
           width: 100%;
           max-width: 400px;
-          margin: 0 auto 30px;
+          margin: 0 auto;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -466,8 +486,8 @@ const contentTransform = computed(() => {
       }
     }
     .lyric-page {
-      padding: 0 24px;
-      padding-top: 60px;
+      padding: calc(var(--safe-area-top) + var(--top-bar-height)) var(--page-inline-space)
+        calc(var(--safe-area-bottom) + var(--pagination-space));
       display: flex;
       flex-direction: column;
       .lyric-header {
@@ -538,7 +558,7 @@ const contentTransform = computed(() => {
   }
   .pagination {
     position: absolute;
-    bottom: 24px;
+    bottom: calc(var(--safe-area-bottom) + 14px);
     left: 0;
     width: 100%;
     display: flex;
@@ -567,6 +587,131 @@ const contentTransform = computed(() => {
         width: 16px;
         border-radius: 4px;
         opacity: 0.8;
+      }
+    }
+  }
+
+  @media (max-height: 700px) and (orientation: portrait) {
+    --page-inline-space: 16px;
+    --top-bar-height: 44px;
+    --pagination-space: 34px;
+    --section-gap: 12px;
+    --cover-min-size: 136px;
+
+    .mobile-content .info-page {
+      .cover-section {
+        padding: 2px 0 10px;
+      }
+      .info-group {
+        .song-info-bar {
+          .info-actions {
+            gap: 8px;
+            .action-btn {
+              width: 44px;
+              height: 44px;
+            }
+          }
+          .info-section :deep(.mobile-data) {
+            .name .name-text {
+              font-size: 22px;
+            }
+            .alia {
+              margin: 2px 0 2px 4px;
+              font-size: 14px;
+            }
+            .play-meta {
+              padding: 2px 4px;
+            }
+            .artists .ar,
+            .album,
+            .dj {
+              font-size: 14px;
+            }
+          }
+        }
+        .control-section {
+          padding: 0 4px;
+          .mode-btn,
+          .ctrl-btn {
+            width: 44px;
+            height: 44px;
+          }
+          .play-btn {
+            width: 52px;
+            height: 52px;
+          }
+        }
+      }
+    }
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    --page-inline-space: 20px;
+    --top-bar-height: 44px;
+    --pagination-space: 28px;
+    --section-gap: 10px;
+    --cover-min-size: 0px;
+
+    .mobile-content {
+      .info-page {
+        grid-template-columns: minmax(140px, 42%) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
+        column-gap: 24px;
+        padding-bottom: calc(var(--safe-area-bottom) + var(--pagination-space));
+        .cover-section {
+          min-height: 0;
+          padding: 0;
+        }
+        .info-group {
+          min-height: 0;
+          align-self: center;
+          overflow-y: auto;
+          scrollbar-width: none;
+          &::-webkit-scrollbar {
+            display: none;
+          }
+          .song-info-bar {
+            .info-actions {
+              gap: 8px;
+              .action-btn {
+                width: 44px;
+                height: 44px;
+              }
+            }
+            .info-section :deep(.mobile-data) {
+              .name .name-text {
+                font-size: 22px;
+              }
+              .alia {
+                margin: 2px 0 2px 4px;
+                font-size: 14px;
+              }
+              .play-meta {
+                padding: 2px 4px;
+              }
+              .artists .ar,
+              .album,
+              .dj {
+                font-size: 14px;
+              }
+            }
+          }
+          .control-section {
+            padding: 0 4px;
+            .mode-btn,
+            .ctrl-btn {
+              width: 44px;
+              height: 44px;
+            }
+            .play-btn {
+              width: 52px;
+              height: 52px;
+            }
+          }
+        }
+      }
+      .lyric-page {
+        padding-top: calc(var(--safe-area-top) + var(--top-bar-height));
       }
     }
   }

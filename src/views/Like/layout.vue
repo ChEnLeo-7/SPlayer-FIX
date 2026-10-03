@@ -73,12 +73,12 @@ const likeData = computed(() => [
   {
     icon: "Video",
     name: "like-videos",
-    length: dataStore.userLikeData.mvs?.length || 0,
+    length: dataStore.neteaseLikeData.mvs?.length || 0,
   },
   {
     icon: "Record",
     name: "like-radios",
-    length: dataStore.userLikeData.djs?.length || 0,
+    length: dataStore.neteaseLikeData.djs?.length || 0,
   },
 ]);
 

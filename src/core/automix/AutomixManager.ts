@@ -430,6 +430,7 @@ export class AutomixManager {
     if (
       !settingStore.enableAutomix ||
       audioManager.engineType === "mpv" ||
+      audioManager.engineType === "media3" ||
       audioManager.paused ||
       playerController.isTransitioning ||
       statusStore.personalFmMode
@@ -598,7 +599,8 @@ export class AutomixManager {
       !statusStore.playStatus ||
       !settingStore.enableAutomix ||
       statusStore.personalFmMode ||
-      audioManager.engineType === "mpv"
+      audioManager.engineType === "mpv" ||
+      audioManager.engineType === "media3"
     ) {
       this.resetAutomixScheduling("IDLE");
       return;

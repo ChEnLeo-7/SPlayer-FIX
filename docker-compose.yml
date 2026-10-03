@@ -37,6 +37,8 @@ services:
       - SELECT_MAX_BR=true
       - LOG_LEVEL=debug
       - SEARCH_ALBUM=true
+      # 允许通过局域网 HTTP 使用 SPlayer 账户；公网部署建议改为 false
+      - SPLAYER_ALLOW_INSECURE_HTTP=true
     networks:
       - shared-net
 

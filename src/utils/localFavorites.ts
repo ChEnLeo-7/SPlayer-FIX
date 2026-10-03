@@ -23,7 +23,10 @@ export const canUseServerLocalFavorites = () => {
 const applyLocalFavorites = async (data: LocalFavoritesData) => {
   const dataStore = useDataStore();
   const localStore = useLocalStore();
-  await dataStore.setUserLikeData("songs", data.songs.map((song) => song.id));
+  await dataStore.setUserLikeData(
+    "songs",
+    data.songs.map((song) => song.id),
+  );
   await dataStore.setUserLikeData("playlists", data.playlists);
   await dataStore.setUserLikeData("albums", data.albums);
   await dataStore.setLikeSongsList(

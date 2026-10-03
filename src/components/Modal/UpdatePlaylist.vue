@@ -66,7 +66,7 @@ const dataStore = useDataStore();
 const localStore = useLocalStore();
 
 // 是否为我喜欢
-const isLiked = computed(() => dataStore.userLikeData.playlists?.[0]?.id === props.id);
+const isLiked = computed(() => dataStore.neteaseLikeData.playlists?.[0]?.id === props.id);
 
 // 表单数据
 const updateFormRef = ref<FormInst | null>(null);

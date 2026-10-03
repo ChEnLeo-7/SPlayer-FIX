@@ -23,7 +23,7 @@
           <div
             v-if="settingStore.fullscreenPlayerElements.addToPlaylist"
             class="menu-icon"
-            @click.stop="openPlaylistAdd([musicStore.playSong], !!musicStore.playSong.path)"
+            @click.stop="openPlaylistAdd([musicStore.playSong])"
           >
             <SvgIcon name="AddList" />
           </div>

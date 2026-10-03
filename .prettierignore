@@ -1,5 +1,6 @@
 out
 dist
+.pnpm-store
 pnpm-lock.yaml
 LICENSE.md
 auto-imports.d.ts

@@ -39,6 +39,7 @@ const openDropdown = (
   index: number,
   playListId?: number,
   isDailyRecommend: boolean = false,
+  isPrivateFavorites: boolean = false,
 ) => {
   try {
     e.preventDefault();
@@ -52,6 +53,7 @@ const openDropdown = (
       playListId || 0,
       isDailyRecommend,
       (event, args) => emit(event, args),
+      isPrivateFavorites,
     );
     // 头部信息
     const headerOption: DropdownOption = {

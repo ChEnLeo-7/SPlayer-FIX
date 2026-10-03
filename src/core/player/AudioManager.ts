@@ -1,5 +1,5 @@
 import { useSettingStore } from "@/stores";
-import { checkIsolationSupport, isElectron } from "@/utils/env";
+import { checkIsolationSupport, isElectron, isNativeAndroid } from "@/utils/env";
 import { TypedEventTarget } from "@/utils/TypedEventTarget";
 import { AudioElementPlayer } from "../audio-player/AudioElementPlayer";
 import { AUDIO_EVENTS, type AudioEventMap } from "../audio-player/BaseAudioPlayer";
@@ -12,6 +12,7 @@ import type {
   PlayOptions,
 } from "../audio-player/IPlaybackEngine";
 import { MpvPlayer, useMpvPlayer } from "../audio-player/MpvPlayer";
+import { Media3Player } from "../audio-player/Media3Player";
 import { getSharedAudioContext } from "../automix/SharedAudioContext";
 
 /**
@@ -34,7 +35,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
   private _masterVolume: number = 1.0;
 
   /** 当前引擎类型：element | ffmpeg | mpv */
-  public readonly engineType: "element" | "ffmpeg" | "mpv";
+  public readonly engineType: "element" | "ffmpeg" | "mpv" | "media3";
 
   /** 引擎能力描述 */
   public readonly capabilities: EngineCapabilities;
@@ -43,7 +44,10 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
     super();
 
     // 根据设置选择引擎
-    if (isElectron && playbackEngine === "mpv") {
+    if (isNativeAndroid) {
+      this.engine = new Media3Player();
+      this.engineType = "media3";
+    } else if (isElectron && playbackEngine === "mpv") {
       const mpvPlayer = useMpvPlayer();
       mpvPlayer.init();
       this.engine = mpvPlayer;
@@ -143,11 +147,12 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
       mixType?: "default" | "bassSwap";
       rate?: number;
       replayGain?: number;
+      mediaItem?: PlayOptions["mediaItem"];
       fadeCurve?: FadeCurve;
     },
   ): Promise<void> {
     // MPV 不支持 Web Audio API 级别的 Crossfade，回退到普通播放
-    if (this.engineType === "mpv") {
+    if (this.engineType === "mpv" || this.engineType === "media3") {
       this.stop();
       if (options.onSwitch) options.onSwitch();
       await this.play(url, {
@@ -155,6 +160,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
         seek: options.seek,
         fadeIn: true,
         fadeDuration: options.duration,
+        mediaItem: options.mediaItem,
       });
       return;
     }
@@ -196,6 +202,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
       autoPlay: true,
       seek: options.seek,
       fadeIn: false,
+      mediaItem: options.mediaItem,
     });
     // 新引擎逐渐增加音量
     if (newEngine.rampVolumeTo) {

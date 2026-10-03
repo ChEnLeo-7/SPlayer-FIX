@@ -289,7 +289,7 @@ export interface UserDataType {
 }
 
 export interface UserLikeDataType {
-  songs: number[];
+  songs: Array<number | string>;
   playlists: CoverType[];
   artists: ArtistType[];
   albums: CoverType[];

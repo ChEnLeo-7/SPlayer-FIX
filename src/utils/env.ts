@@ -12,6 +12,9 @@ export const isMac = userAgent.includes("Macintosh");
 export const isLinux = userAgent.includes("Linux");
 /** 是否为 Electron 环境 */
 export const isElectron = userAgent.includes("Electron") || typeof window?.electron !== "undefined";
+/** 是否为 Capacitor Android 客户端 */
+export const isNativeAndroid =
+  Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
 
 /** 是否为移动端 */
 export const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
@@ -51,3 +54,4 @@ export const checkIsolationSupport = (): boolean => {
 
   return isSecure && isIsolated && hasSharedArrayBuffer;
 };
+import { Capacitor } from "@capacitor/core";

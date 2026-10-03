@@ -89,13 +89,7 @@
                 </template>
                 播放
               </n-button>
-              <n-button
-                :focusable="false"
-                strong
-                secondary
-                round
-                @click="handleLikeArtist"
-              >
+              <n-button :focusable="false" strong secondary round @click="handleLikeArtist">
                 <template #icon>
                   <SvgIcon :name="isLikeArtist ? 'Favorite' : 'FavoriteBorder'" />
                 </template>

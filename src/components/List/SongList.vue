@@ -244,6 +244,8 @@ const props = withDefaults(
     disableHeightTransition?: boolean;
     /** 是否可拖拽排序 */
     draggable?: boolean;
+    /** 是否为私人喜欢列表 */
+    privateFavorites?: boolean;
   }>(),
   {
     type: "song",
@@ -321,7 +323,13 @@ const mobileSongMenuRef = ref<InstanceType<typeof MobileSongMenu> | null>(null);
 
 const handleShowMenu = (e: MouseEvent, song: SongType, index: number) => {
   if (isSmallScreen.value) {
-    mobileSongMenuRef.value?.open(song, index, props.playListId, props.isDailyRecommend);
+    mobileSongMenuRef.value?.open(
+      song,
+      index,
+      props.playListId,
+      props.isDailyRecommend,
+      props.privateFavorites,
+    );
   } else {
     songListMenuRef.value?.openDropdown(
       e,
@@ -330,6 +338,7 @@ const handleShowMenu = (e: MouseEvent, song: SongType, index: number) => {
       index,
       props.playListId,
       props.isDailyRecommend,
+      props.privateFavorites,
     );
   }
 };

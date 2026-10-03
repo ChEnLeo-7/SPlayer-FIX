@@ -3,6 +3,7 @@ import { AudioErrorCode } from "@/core/audio-player/BaseAudioPlayer";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import type { AudioSourceType, QualityType, SongType } from "@/types/main";
 import type { RepeatModeType, ShuffleModeType } from "@/types/shared/play-mode";
+import type { AndroidMediaItem } from "@/types/android-media";
 import { type AudioAnalysis } from "@/types/audio/automix";
 import { calculateLyricIndex } from "@/utils/calc";
 import { getCoverColor } from "@/utils/color";
@@ -15,6 +16,7 @@ import { calculateProgress } from "@/utils/time";
 import type { LyricLine } from "@applemusic-like-lyrics/lyric";
 import { type DebouncedFunc, throttle } from "lodash-es";
 import { useBlobURLManager } from "../resource/BlobURLManager";
+import { createAndroidMediaItem } from "@/platform/android/mediaPlugin";
 import { useAudioManager } from "./AudioManager";
 import { useAutomixManager } from "@/core/automix/AutomixManager";
 import { useLyricManager } from "./LyricManager";
@@ -331,6 +333,7 @@ class PlayerController {
         startSeek,
         options.crossfade ? { duration: options.crossfadeDuration ?? 5 } : undefined,
         initialRate,
+        createAndroidMediaItem(playSongData, audioSource.url),
       );
       if (requestToken !== this.currentRequestToken) return;
       // 后置处理
@@ -375,7 +378,14 @@ class PlayerController {
       // 停止当前播放
       audioManager.stop();
       // 执行底层播放，保持进度，保持原播放状态
-      await this.loadAndPlay(audioSource.url, shouldAutoPlay, seek);
+      await this.loadAndPlay(
+        audioSource.url,
+        shouldAutoPlay,
+        seek,
+        undefined,
+        1,
+        createAndroidMediaItem(playSongData, audioSource.url),
+      );
       statusStore.playLoading = false;
     } catch (error) {
       console.error("❌ 切换音质失败:", error);
@@ -415,7 +425,14 @@ class PlayerController {
       const shouldAutoPlay = statusStore.playStatus;
       // 停止当前播放
       audioManager.stop();
-      await this.loadAndPlay(audioSource.url, shouldAutoPlay, seek);
+      await this.loadAndPlay(
+        audioSource.url,
+        shouldAutoPlay,
+        seek,
+        undefined,
+        1,
+        createAndroidMediaItem(playSongData, audioSource.url),
+      );
       statusStore.playLoading = false;
     } catch (error) {
       console.error("❌ 切换音频源失败:", error);
@@ -445,6 +462,7 @@ class PlayerController {
       replayGain?: number;
     },
     initialRate: number = 1.0,
+    mediaItem?: AndroidMediaItem,
   ) {
     const statusStore = useStatusStore();
     const settingStore = useSettingStore();
@@ -516,6 +534,7 @@ class PlayerController {
             ? statusStore.playRate * initialRate
             : undefined,
           replayGain,
+          mediaItem,
         });
       } else {
         // 计算渐入时间
@@ -525,6 +544,7 @@ class PlayerController {
           fadeDuration: fadeTime,
           autoPlay,
           seek: seek / 1000,
+          mediaItem,
         });
       }
 

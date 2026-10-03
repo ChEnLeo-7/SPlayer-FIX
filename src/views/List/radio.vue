@@ -113,7 +113,7 @@ const currentTab = ref<"songs" | "comments">("songs");
 
 // 是否处于收藏播客
 const isLikeRadio = computed(() => {
-  return dataStore.userLikeData.djs.some((radio) => radio.id === detailData.value?.id);
+  return dataStore.neteaseLikeData.djs.some((radio) => radio.id === detailData.value?.id);
 });
 
 // 是否处于播客页面

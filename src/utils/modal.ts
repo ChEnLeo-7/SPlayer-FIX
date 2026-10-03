@@ -2,7 +2,6 @@ import type { CoverType, UpdateInfoType, SettingType, SongType } from "@/types/m
 import { CURRENT_AGREEMENT_VERSION } from "@/constants/agreement";
 import { NScrollbar } from "naive-ui";
 import { isLogin } from "./auth";
-import { canUseServerLocalFavorites } from "@/utils/localFavorites";
 import { isArray, isFunction } from "lodash-es";
 import { useSettingStore } from "@/stores";
 import router from "@/router";
@@ -148,6 +147,26 @@ export const openUserLogin = async (
   });
 };
 
+/** 打开 SPlayer 账户弹窗 */
+export const openSplayerAccount = async () => {
+  if (isModalOpen("splayerAccount", "SPlayer 账户弹窗已打开")) return;
+  setModalOpen("splayerAccount");
+  const { default: SPlayerAccountModal } =
+    await import("@/components/Modal/SPlayerAccountModal.vue");
+  const modal = window.$modal.create({
+    preset: "card",
+    title: "SPlayer 账户",
+    transformOrigin: "center",
+    autoFocus: false,
+    maskClosable: false,
+    closeOnEsc: false,
+    closable: false,
+    style: { width: "420px", maxWidth: "calc(100vw - 32px)" },
+    content: () => h(SPlayerAccountModal, { onClose: () => modal.destroy() }),
+    onAfterLeave: () => setModalClosed("splayerAccount"),
+  });
+};
+
 /**
  * 跳转到歌手
  * @param data 歌手信息
@@ -189,22 +208,35 @@ export const openSongInfoEditor = async (song: SongType) => {
   });
 };
 
-// 添加到歌单
-export const openPlaylistAdd = async (data: SongType[], isLocal: boolean) => {
-  if (!data.length) return window.$message.warning("请正确选择歌曲");
-  const useLocal = isLocal || canUseServerLocalFavorites();
-  if (!isLogin() && !useLocal) return openUserLogin();
+const openPlaylistAddByProvider = async (
+  data: SongType[],
+  provider: "private" | "netease",
+): Promise<void> => {
+  if (!data.length) {
+    window.$message.warning("请正确选择歌曲");
+    return;
+  }
   const { default: PlaylistAdd } = await import("@/components/Modal/PlaylistAdd.vue");
   const modal = window.$modal.create({
     preset: "card",
     transformOrigin: "center",
     autoFocus: false,
     style: { width: "600px" },
-    title: useLocal ? "添加到本地歌单" : "添加到歌单",
+    title: provider === "private" ? "添加到私人歌单" : "添加到网易云歌单",
     content: () => {
-      return h(PlaylistAdd, { data, isLocal: useLocal, onClose: () => modal.destroy() });
+      return h(PlaylistAdd, { data, provider, onClose: () => modal.destroy() });
     },
   });
+};
+
+// 默认添加到当前私人本地歌单
+export const openPlaylistAdd = async (data: SongType[], _legacyIsLocal?: boolean) =>
+  openPlaylistAddByProvider(data, "private");
+
+// 显式添加到网易云歌单
+export const openNeteasePlaylistAdd = async (data: SongType[]) => {
+  if (isLogin() !== 1) return openUserLogin(true);
+  return openPlaylistAddByProvider(data, "netease");
 };
 
 /**

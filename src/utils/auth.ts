@@ -14,9 +14,9 @@ import {
 } from "@/api/user";
 import { likeSong } from "@/api/song";
 import { formatCoverList, formatArtistsList, formatSongsList } from "@/utils/format";
-import { useDataStore, useMusicStore, useLocalStore } from "@/stores";
+import { useAccountStore, useDataStore, useMusicStore, useLocalStore } from "@/stores";
 import { logout, refreshLogin } from "@/api/login";
-import { debounce, isFunction, type DebouncedFunc } from "lodash-es";
+import { cloneDeep, debounce, isFunction, type DebouncedFunc } from "lodash-es";
 import { isBeforeSixAM } from "./time";
 import { dailyRecommend } from "@/api/rec";
 import { isElectron } from "./env";
@@ -25,13 +25,6 @@ import { likeArtist } from "@/api/artist";
 import { likeAlbum } from "@/api/album";
 import { radioSub } from "@/api/radio";
 import router from "@/router";
-import {
-  canUseServerLocalFavorites,
-  likeServerLocalAlbum,
-  likeServerLocalPlaylist,
-  likeServerLocalSong,
-  syncServerLocalFavorites,
-} from "@/utils/localFavorites";
 
 /**
  * 用户是否登录
@@ -58,7 +51,6 @@ export const toLogout = async (clearUserList = false): Promise<void> => {
   if (clearUserList) {
     dataStore.userList = [];
   }
-  if (canUseServerLocalFavorites()) await syncServerLocalFavorites();
   // 跳转首页
   router.push("/");
   window.$message.success("成功退出登录");
@@ -299,7 +291,7 @@ export const updateUserLikeSongs = async () => {
   const dataStore = useDataStore();
   if (!isLogin() || !dataStore.userData.userId) return;
   const result = await userLike(dataStore.userData.userId);
-  dataStore.setUserLikeData("songs", result.ids);
+  await dataStore.setNeteaseLikeData("songs", result.ids);
 };
 
 // 更新用户喜欢歌单
@@ -309,14 +301,14 @@ export const updateUserLikePlaylist = async () => {
   if (!isLogin() || !userId) return;
   if (dataStore.loginType === "uid") {
     const result = await userPlaylist(30, 0, userId);
-    await dataStore.setUserLikeData("playlists", formatCoverList(result.playlist));
+    await dataStore.setNeteaseLikeData("playlists", formatCoverList(result.playlist));
     return;
   }
   // 计算数量
   const { createdPlaylistCount, subPlaylistCount } = dataStore.userData;
   const number = (createdPlaylistCount || 0) + (subPlaylistCount || 0) || 50;
   const result = await userPlaylist(number, 0, userId);
-  await dataStore.setUserLikeData("playlists", formatCoverList(result.playlist));
+  await dataStore.setNeteaseLikeData("playlists", formatCoverList(result.playlist));
 };
 
 // 更新用户喜欢歌手
@@ -339,43 +331,35 @@ export const updateUserLikeMvs = async () => {
   await setUserLikeDataLoop(userMv, formatCoverList, "mvs");
 };
 
-// 喜欢歌曲
+// 更新私人喜欢歌曲
 export const toLikeSong: DebouncedFunc<(song: SongType, like: boolean) => Promise<void>> = debounce(
   async (song: SongType, like: boolean): Promise<void> => {
     try {
-      if (!isLogin()) {
-        if (canUseServerLocalFavorites()) {
-          await likeServerLocalSong(song, like);
-          window.$message.success(like ? "已添加到本地收藏" : "已取消本地收藏");
-          return;
-        }
-        window.$message.warning("请登录后使用");
-        return;
-      }
-      if (isLogin() === 2) {
-        window.$message.warning("该登录模式暂不支持该操作");
-        return;
-      }
       const dataStore = useDataStore();
-      const { id, path, type } = song;
-      if (path || type === "streaming") {
-        window.$message.warning("该类型歌曲暂未实现");
+      const accountStore = useAccountStore();
+      const id = song?.id as unknown as number | string;
+      if (id === undefined || id === null || id === "" || !song?.name) {
+        window.$message.warning("缺少歌曲详情，无法更新私人收藏");
         return;
       }
-      const likeList = dataStore.userLikeData.songs;
-      const exists = likeList.includes(id);
-      await likeSong(id, like);
-      if (like && !exists) {
-        likeList.push(id);
+      const currentList = dataStore.likeSongsList.data;
+      const hasDetail = currentList.some((item) => String(item.id) === String(id));
+      const exists = hasDetail || dataStore.userLikeData.songs.includes(id);
+      let nextList = currentList.filter((item) => String(item.id) !== String(id));
+      if (like && !hasDetail) {
+        nextList = [cloneDeep(toRaw(song)), ...nextList];
         window.$message.success("已添加到我喜欢的音乐");
-      } else if (!like && exists) {
-        likeList.splice(likeList.indexOf(id), 1);
-        window.$message.success("已取消喜欢");
-      } else if (like && exists) {
+      } else if (like) {
         window.$message.info("我喜欢的音乐中已存在该歌曲");
+        return;
+      } else if (!exists) {
+        window.$message.info("该歌曲不在我喜欢的音乐中");
+        return;
+      } else {
+        window.$message.success("已取消喜欢");
       }
-      // 更新
-      dataStore.setUserLikeData("songs", likeList);
+      await dataStore.setLikeSongsList(dataStore.likeSongsList.detail, nextList);
+      accountStore.scheduleSync();
       // ipc
       if (isElectron) window.electron.ipcRenderer.send("like-status-change", like);
     } catch (error) {
@@ -387,32 +371,30 @@ export const toLikeSong: DebouncedFunc<(song: SongType, like: boolean) => Promis
   { leading: true, trailing: false },
 );
 
-const toLikeSomething = (
+// 显式更新网易云喜欢歌曲
+export const toLikeNeteaseSong = async (song: SongType, like: boolean): Promise<void> => {
+  if (isLogin() !== 1) {
+    window.$message.warning("请先登录网易云账号");
+    return;
+  }
+  await likeSong(song.id, like);
+  await updateUserLikeSongs();
+};
+
+const toLikeNeteaseSomething = (
   actionName: string,
   thingName: string,
   request: () => (id: number, t: 1 | 2) => Promise<{ code: number }>,
   update: () => Promise<void>,
-  localLike?: (item: CoverType, like: boolean) => Promise<void>,
 ): DebouncedFunc<(target: number | CoverType, like: boolean) => Promise<void>> =>
   debounce(
     async (target: number | CoverType, like: boolean): Promise<void> => {
-      // 错误情况
       const id = typeof target === "number" ? target : Number(target?.id);
       if (!id) return;
-      if (!isLogin()) {
-        if (canUseServerLocalFavorites() && localLike && typeof target !== "number") {
-          await localLike(target, like);
-          window.$message.success(like ? "已添加到本地收藏" : "已取消本地收藏");
-          return;
-        }
-        window.$message.warning("请登录后使用");
+      if (isLogin() !== 1) {
+        window.$message.warning("请先登录网易云账号");
         return;
       }
-      if (isLogin() === 2) {
-        window.$message.warning("该登录模式暂不支持该操作");
-        return;
-      }
-      // 请求
       const { code } = await request()(id, like ? 1 : 2);
       if (code === 200) {
         window.$message.success((like ? "" : "取消") + actionName + thingName + "成功");
@@ -427,85 +409,103 @@ const toLikeSomething = (
     { leading: true, trailing: false },
   );
 
-// 更新本地歌手关注
-const normalizeLocalArtist = (artist: ArtistType): ArtistType => {
-  const rawArtist = toRaw(artist);
-  return {
-    ...rawArtist,
-    id: Number(rawArtist.id),
-    coverSize: rawArtist.coverSize ? { ...toRaw(rawArtist.coverSize) } : undefined,
-  };
-};
-
-const updateLocalArtistLike = async (artist: ArtistType, like: boolean): Promise<void> => {
+const updatePrivateCoverLike = async (
+  key: "playlists" | "albums",
+  thingName: string,
+  target: number | CoverType,
+  like: boolean,
+): Promise<void> => {
+  if (typeof target === "number") {
+    window.$message.warning(`缺少${thingName}详情，无法更新私人收藏`);
+    return;
+  }
+  const id = Number(target?.id);
+  if (!id || !target.name) {
+    window.$message.warning(`缺少${thingName}详情，无法更新私人收藏`);
+    return;
+  }
   const dataStore = useDataStore();
-  const localArtist = normalizeLocalArtist(artist);
-  const list = dataStore.userLikeData.artists.map(normalizeLocalArtist);
-  const index = list.findIndex((item) => item.id === localArtist.id);
+  const list = cloneDeep(toRaw(dataStore.userLikeData[key]));
+  const index = list.findIndex((item) => Number(item.id) === id);
 
   if (like) {
     if (index !== -1) {
-      window.$message.info("本地关注中已存在该歌手");
+      window.$message.info(`私人收藏中已存在该${thingName}`);
       return;
     }
-    list.unshift(localArtist);
-    await dataStore.setUserLikeData("artists", list);
-    window.$message.success("已添加到本地关注");
-    return;
+    list.unshift(cloneDeep(toRaw(target)));
+  } else {
+    if (index === -1) {
+      window.$message.info(`该${thingName}不在私人收藏中`);
+      return;
+    }
+    list.splice(index, 1);
   }
-
-  if (index === -1) {
-    window.$message.info("该歌手不在本地关注中");
-    return;
-  }
-  list.splice(index, 1);
-  await dataStore.setUserLikeData("artists", list);
-  window.$message.success("已取消本地关注");
+  await dataStore.setUserLikeData(key, list);
+  useAccountStore().scheduleSync();
+  window.$message.success(like ? `已收藏${thingName}` : `已取消收藏${thingName}`);
 };
 
-// 收藏/取消收藏歌单
-export const toLikePlaylist = toLikeSomething(
+const toLikePrivateCover = (
+  key: "playlists" | "albums",
+  thingName: string,
+): DebouncedFunc<(target: number | CoverType, like: boolean) => Promise<void>> =>
+  debounce((target, like) => updatePrivateCoverLike(key, thingName, target, like), 300, {
+    leading: true,
+    trailing: false,
+  });
+
+// 收藏/取消收藏私人歌单
+export const toLikePlaylist = toLikePrivateCover("playlists", "歌单");
+
+// 收藏/取消收藏私人专辑
+export const toLikeAlbum = toLikePrivateCover("albums", "专辑");
+
+// 显式收藏/取消收藏网易云歌单
+export const toLikeNeteasePlaylist = toLikeNeteaseSomething(
   "收藏",
   "歌单",
   () => likePlaylist,
   updateUserLikePlaylist,
-  likeServerLocalPlaylist,
 );
 
-// 收藏/取消收藏专辑
-export const toLikeAlbum = toLikeSomething(
+// 显式收藏/取消收藏网易云专辑
+export const toLikeNeteaseAlbum = toLikeNeteaseSomething(
   "收藏",
   "专辑",
   () => likeAlbum,
   updateUserLikeAlbums,
-  likeServerLocalAlbum,
 );
 
-// 收藏/取消收藏歌手
+// 收藏/取消收藏私人歌手
 export const toLikeArtist: DebouncedFunc<
   (target: number | ArtistType, like: boolean) => Promise<void>
 > = debounce(
   async (target: number | ArtistType, like: boolean): Promise<void> => {
     try {
-      const id = typeof target === "number" ? target : Number(target?.id);
-      if (!id) return;
-
-      if (isLogin() !== 1) {
-        if (typeof target === "number") {
-          window.$message.warning("暂无歌手信息，无法添加到本地关注");
-          return;
-        }
-        await updateLocalArtistLike(target, like);
+      if (typeof target === "number") {
+        window.$message.warning("缺少歌手详情，无法更新私人收藏");
         return;
       }
-
-      const { code } = await likeArtist(id, like ? 1 : 2);
-      if (code === 200) {
-        window.$message.success((like ? "" : "取消") + "收藏歌手成功");
-        await updateUserLikeArtists();
-      } else {
-        window.$message.success((like ? "" : "取消") + "收藏歌手失败，请重试");
+      const id = Number(target?.id);
+      if (!id || !target.name) {
+        window.$message.warning("缺少歌手详情，无法更新私人收藏");
+        return;
       }
+      const dataStore = useDataStore();
+      const list = cloneDeep(toRaw(dataStore.userLikeData.artists));
+      const index = list.findIndex((item) => item.id === id);
+      if (like && index === -1) {
+        list.unshift(cloneDeep(toRaw(target)));
+      } else if (!like && index !== -1) {
+        list.splice(index, 1);
+      } else {
+        window.$message.info(like ? "私人收藏中已存在该歌手" : "该歌手不在私人收藏中");
+        return;
+      }
+      await dataStore.setUserLikeData("artists", list);
+      useAccountStore().scheduleSync();
+      window.$message.success(like ? "已收藏歌手" : "已取消收藏歌手");
     } catch (error) {
       console.error("Failed to update artist like:", error);
       window.$message.error("更新歌手关注状态失败");
@@ -515,8 +515,16 @@ export const toLikeArtist: DebouncedFunc<
   { leading: true, trailing: false },
 );
 
+// 显式收藏/取消收藏网易云歌手
+export const toLikeNeteaseArtist = toLikeNeteaseSomething(
+  "收藏",
+  "歌手",
+  () => likeArtist,
+  updateUserLikeArtists,
+);
+
 // 订阅/取消订阅播客
-export const toSubRadio = toLikeSomething("订阅", "播客", () => radioSub, updateUserLikeDjs);
+export const toSubRadio = toLikeNeteaseSomething("订阅", "播客", () => radioSub, updateUserLikeDjs);
 
 // 循环获取用户喜欢数据
 const setUserLikeDataLoop = async <T>(
@@ -566,9 +574,9 @@ const setUserLikeDataLoop = async <T>(
   }
   // 保存数据
   if (key === "artists") {
-    await dataStore.setUserLikeData(key, allData as ArtistType[]);
+    await dataStore.setNeteaseLikeData(key, allData as ArtistType[]);
   } else if (key === "playlists" || key === "albums" || key === "mvs" || key === "djs") {
-    await dataStore.setUserLikeData(key, allData as CoverType[]);
+    await dataStore.setNeteaseLikeData(key, allData as CoverType[]);
   }
 
   console.log(`✅ Fetched ${allData.length} ${key} for user ${userId}`);

@@ -25,6 +25,8 @@ export default [
       "**/docs",
       "**/auto-imports.d.ts",
       "**/components.d.ts",
+      "android/**/build/**",
+      "android/app/src/main/assets/public/**",
       "native/**/index.d.ts",
     ],
   },

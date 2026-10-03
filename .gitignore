@@ -18,6 +18,18 @@ out
 .env
 target
 *.node
+data/
+*.db-wal
+*.db-shm
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/build/
+android/**/*.apk
+android/**/*.aab
+*.jks
+*.keystore
 
 # Editor directories and files
 .vscode/*

@@ -6,6 +6,7 @@ import { initUnblockAPI } from "./unblock";
 import { initControlAPI } from "./control";
 import { initQQMusicAPI } from "./qqmusic";
 import fastifyCookie from "@fastify/cookie";
+import fastifyProxy from "@fastify/http-proxy";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import fastify from "fastify";
@@ -59,6 +60,23 @@ const initAppServer = async () => {
     server.register(initUnblockAPI, { prefix: "/api" });
     server.register(initControlAPI, { prefix: "/api" });
     server.register(initQQMusicAPI, { prefix: "/api" });
+    const accountUpstream = process.env["SPLAYER_ACCOUNT_UPSTREAM"];
+    if (accountUpstream) {
+      const upstreamUrl = new URL(accountUpstream);
+      server.register(fastifyProxy, {
+        upstream: accountUpstream,
+        prefix: "/api/splayer",
+        rewritePrefix: "/api/splayer",
+        replyOptions: {
+          rewriteRequestHeaders: (_request, headers) => ({
+            ...headers,
+            host: upstreamUrl.host,
+            origin: upstreamUrl.origin,
+            "x-forwarded-proto": upstreamUrl.protocol.slice(0, -1),
+          }),
+        },
+      });
+    }
     // 启动端口
     const port = Number(process.env["VITE_SERVER_PORT"] || 25884);
     await server.listen({ port, host: "127.0.0.1" });

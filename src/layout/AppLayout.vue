@@ -228,7 +228,7 @@ onMounted(() => {
     background-color: rgba(var(--background));
   }
   #main-content {
-    top: 70px;
+    top: calc(70px + var(--safe-area-inset-top));
     background-color: transparent;
     transition: bottom 0.3s;
     .router-view {
@@ -251,6 +251,14 @@ onMounted(() => {
     transform: scale(0.9);
     #main-header {
       -webkit-app-region: no-drag;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  #main {
+    #main-content {
+      top: calc(126px + var(--safe-area-inset-top));
     }
   }
 }

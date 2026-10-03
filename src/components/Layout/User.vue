@@ -55,12 +55,7 @@
       <n-divider />
       <!-- 喜欢数量 -->
       <div v-if="dataStore.loginType !== 'uid'" class="like-num">
-        <div
-          v-for="(item, index) in userLikeData"
-          :key="index"
-          class="num-item"
-          @click="router.push({ name: item.name })"
-        >
+        <div v-for="(item, index) in userLikeData" :key="index" class="num-item">
           <n-number-animation :from="0" :to="item.value" />
           <n-text :depth="3">{{ item.label }}</n-text>
         </div>
@@ -120,7 +115,6 @@ import {
 } from "@/utils/auth";
 import { useMobile } from "@/composables/useMobile";
 
-const router = useRouter();
 const dataStore = useDataStore();
 
 const { isDesktop } = useMobile();
@@ -142,18 +136,15 @@ const userLikeData = computed(() => {
   return [
     {
       label: "歌单",
-      name: "like-playlists",
-      value: dataStore.userLikeData.playlists.length,
+      value: dataStore.neteaseLikeData.playlists.length,
     },
     {
       label: "专辑",
-      name: "like-albums",
-      value: dataStore.userLikeData.albums.length,
+      value: dataStore.neteaseLikeData.albums.length,
     },
     {
       label: "歌手",
-      name: "like-artists",
-      value: dataStore.userLikeData.artists.length,
+      value: dataStore.neteaseLikeData.artists.length,
     },
   ];
 });
@@ -224,7 +215,6 @@ const handleAddAccount = async () => {
       try {
         await updateUserData();
         window.$message.success("登录成功");
-        // router.push("/");
       } catch (error) {
         console.error("Login update failed", error);
       }

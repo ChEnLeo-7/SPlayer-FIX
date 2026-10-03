@@ -1,6 +1,7 @@
 #!/bin/sh
 
 set -e
+umask 077
 
 # 启动解锁服务
 UNBLOCK_BIN="/usr/local/bin/unblockneteasemusic"
@@ -42,8 +43,16 @@ if [ "$ready" -ne 1 ]; then
     exit 1
 fi
 
-# start local favorites service in the background
-node /local-favorites-server.mjs 2>&1 &
+# 启动账户服务
+node /app/account/index.mjs 2>&1 &
+ACCOUNT_PID=$!
+
+# 确认账户服务成功启动
+sleep 1
+if ! kill -0 "$ACCOUNT_PID" 2>/dev/null; then
+    echo "SPlayer account service failed to start" >&2
+    exit 1
+fi
 
 # point the neteasemusic address to the unblock service
 if ! grep -q "music.163.com" /etc/hosts; then

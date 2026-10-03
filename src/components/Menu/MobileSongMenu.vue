@@ -54,10 +54,16 @@ const open = (
   index: number,
   playListId: number = 0,
   isDailyRecommend: boolean = false,
+  isPrivateFavorites: boolean = false,
 ) => {
   currentSong.value = song;
-  menuOptions.value = getMenuOptions(song, index, playListId, isDailyRecommend, (event, args) =>
-    emit(event, args),
+  menuOptions.value = getMenuOptions(
+    song,
+    index,
+    playListId,
+    isDailyRecommend,
+    (event, args) => emit(event, args),
+    isPrivateFavorites,
   );
   showDrawer.value = true;
 };

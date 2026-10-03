@@ -366,7 +366,7 @@ const renderCoverMenu = (list: CoverType[], showCover: boolean, type: "playlist"
 const createPlaylist = computed<MenuOption[]>(() => {
   if (!hasLoginAccount.value) return [];
   const userId = dataStore.userData.userId;
-  const list = dataStore.userLikeData.playlists
+  const list = dataStore.neteaseLikeData.playlists
     .filter((playlist) => playlist?.userId === userId)
     .slice(1);
   return renderCoverMenu(list, settingStore.menuShowCover, "playlist");
@@ -375,15 +375,21 @@ const createPlaylist = computed<MenuOption[]>(() => {
 // 收藏的歌单
 const likedPlaylist = computed<MenuOption[]>(() => {
   if (!hasLoginAccount.value) {
-    return renderCoverMenu(dataStore.userLikeData.playlists, settingStore.menuShowCover, "playlist");
+    return renderCoverMenu(
+      dataStore.neteaseLikeData.playlists,
+      settingStore.menuShowCover,
+      "playlist",
+    );
   }
   const userId = dataStore.userData.userId;
-  const list = dataStore.userLikeData.playlists.filter((playlist) => playlist?.userId !== userId);
+  const list = dataStore.neteaseLikeData.playlists.filter(
+    (playlist) => playlist?.userId !== userId,
+  );
   return renderCoverMenu(list, settingStore.menuShowCover, "playlist");
 });
 
 const likedAlbum = computed<MenuOption[]>(() => {
-  return renderCoverMenu(dataStore.userLikeData.albums, settingStore.menuShowCover, "album");
+  return renderCoverMenu(dataStore.neteaseLikeData.albums, settingStore.menuShowCover, "album");
 });
 
 // 本地歌单菜单
@@ -514,7 +520,7 @@ const checkMenuItem = () => {
       // 获取歌单 id
       const playlistId = Number(router.currentRoute.value.query.id || 0);
       // 是否处于用户歌单
-      const isUserPlaylist = dataStore.userLikeData.playlists.some(
+      const isUserPlaylist = dataStore.neteaseLikeData.playlists.some(
         (playlist) => playlist?.id === playlistId,
       );
       // 是否为本地歌单
@@ -533,7 +539,7 @@ const checkMenuItem = () => {
     }
     case "album": {
       const albumId = Number(router.currentRoute.value.query.id || 0);
-      const isLikedAlbum = dataStore.userLikeData.albums.some(
+      const isLikedAlbum = dataStore.neteaseLikeData.albums.some(
         (album) => Number(album?.id) === albumId,
       );
       if (albumId && isLikedAlbum) {
@@ -567,7 +573,11 @@ onMounted(() => {
 
 // 监听路由
 watch(
-  () => [router.currentRoute.value, dataStore.userLikeData.playlists, dataStore.userLikeData.albums],
+  () => [
+    router.currentRoute.value,
+    dataStore.neteaseLikeData.playlists,
+    dataStore.neteaseLikeData.albums,
+  ],
   () => checkMenuItem(),
 );
 </script>
