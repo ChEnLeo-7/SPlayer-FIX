@@ -5,6 +5,11 @@ on:
     tags:
       - v* # 只在 tag v* 时触发
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to receive the build assets
+        required: false
+        type: string
 
 env:
   NODE_VERSION: 22.x
@@ -134,7 +139,6 @@ jobs:
       - name: Build
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           case "${{ matrix.target }}" in
@@ -221,9 +225,10 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         shell: bash
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="$RELEASE_TAG"
           # 固定维护说明
           cat > notes.md <<'EOF'
           ## 本项目进入维护模式
