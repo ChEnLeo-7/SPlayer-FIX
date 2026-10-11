@@ -1,8 +1,11 @@
 import { isElectron } from "@/utils/env";
 import { defaultAMLLDbServer, songLevelData } from "@/utils/meta";
-import { SongUnlockServer } from "@/core/player/SongManager";
 import { useSettingStore } from "@/stores";
 import request from "@/utils/request";
+
+const MATCH_CACHE_TTL = 5 * 60 * 1000;
+const songMatchCache = new Map<string, { expiresAt: number; value: unknown }>();
+const songMatchPending = new Map<string, Promise<unknown>>();
 
 // 获取歌曲详情
 export const songDetail = (ids: number | number[]) => {
@@ -67,26 +70,23 @@ export const songUrl = (
 
 // 直接获取灰色歌曲链接
 export const matchSongUrl = (id: number, source?: string) => {
-  return request({
+  const cacheKey = `${id}:${source || "auto"}`;
+  const cached = songMatchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value);
+  const pending = songMatchPending.get(cacheKey);
+  if (pending) return pending;
+
+  const requestPromise = request({
     url: "/song/url/match",
     params: { id, source, noCookie: true },
-  });
-};
-
-// 获取解锁歌曲 URL
-export const unlockSongUrl = (
-  id: number,
-  keyword: string,
-  server: SongUnlockServer,
-  songName?: string,
-  artist?: string,
-) => {
-  const params = server === SongUnlockServer.NETEASE ? { id } : { keyword, songName, artist };
-  return request({
-    baseURL: "/api/unblock",
-    url: `/${server}`,
-    params: { ...params, noCookie: true },
-  });
+  })
+    .then((result) => {
+      songMatchCache.set(cacheKey, { expiresAt: Date.now() + MATCH_CACHE_TTL, value: result });
+      return result;
+    })
+    .finally(() => songMatchPending.delete(cacheKey));
+  songMatchPending.set(cacheKey, requestPromise);
+  return requestPromise;
 };
 
 // 获取歌曲歌词

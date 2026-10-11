@@ -92,18 +92,27 @@ const settingStore = useSettingStore();
 <style lang="scss" scoped>
 .artist-list {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 20px 4px;
   .artist-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
     gap: 20px;
     @media (max-width: 600px) {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
+    }
+    @media (max-width: 340px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
   .artist-item {
     position: relative;
+    min-width: 0;
+    max-width: 100%;
     height: auto;
     border-radius: 16px;
     z-index: 0;
@@ -165,8 +174,11 @@ const settingStore = useSettingStore();
       display: flex;
       align-items: center;
       flex-direction: column;
+      min-width: 0;
+      max-width: 100%;
       padding: 0 12px;
       .name {
+        max-width: 100%;
         font-size: 16px;
         margin-bottom: 4px;
       }

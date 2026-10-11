@@ -27,6 +27,12 @@ export class Media3Player extends TypedEventTarget<AudioEventMap> implements IPl
   private volume = 1;
   private rate = 1;
   private errorCode = 0;
+  private seekSequence = 0;
+  private pendingSeek: {
+    id: number;
+    positionSeconds: number;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null = null;
 
   public init(): void {
     if (this.readyPromise) return;
@@ -47,12 +53,22 @@ export class Media3Player extends TypedEventTarget<AudioEventMap> implements IPl
   }
 
   private applyState(event: AndroidPlaybackEvent) {
-    this.positionSeconds = Math.max(0, event.positionMs) / 1000;
+    if (!this.pendingSeek || event.event === "seeked") {
+      this.positionSeconds = Math.max(0, event.positionMs) / 1000;
+    }
     this.durationSeconds = Math.max(0, event.durationMs) / 1000;
     this.isPaused = !event.playWhenReady;
   }
 
   private handleNativeEvent(event: AndroidPlaybackEvent) {
+    if (event.event === "seeked") {
+      if (!this.pendingSeek || event.seekId !== this.pendingSeek.id) return;
+      if (this.pendingSeek.timer) clearTimeout(this.pendingSeek.timer);
+      this.pendingSeek = null;
+      this.applyState(event);
+      this.dispatch(AUDIO_EVENTS.TIME_UPDATE);
+      return;
+    }
     this.applyState(event);
     switch (event.event) {
       case "loadstart":
@@ -90,7 +106,52 @@ export class Media3Player extends TypedEventTarget<AudioEventMap> implements IPl
     }
   }
 
+  private recoverPendingSeek(id: number, error?: unknown) {
+    if (this.pendingSeek?.id !== id) return;
+    if (this.pendingSeek.timer) clearTimeout(this.pendingSeek.timer);
+    this.pendingSeek = null;
+    if (error) console.error("Android 跳转播放进度失败:", error);
+    void sPlayerMediaPlugin.clearPendingSeek({ seekId: id }).catch(() => {});
+    void sPlayerMediaPlugin
+      .getState()
+      .then((state) => {
+        this.applyState(state);
+        this.dispatch(AUDIO_EVENTS.TIME_UPDATE);
+      })
+      .catch((stateError) => console.error("读取 Android 播放状态失败:", stateError));
+  }
+
+  private scheduleSeekVerification(id: number, attempt = 0) {
+    if (this.pendingSeek?.id !== id) return;
+    if (this.pendingSeek.timer) clearTimeout(this.pendingSeek.timer);
+    this.pendingSeek.timer = setTimeout(() => {
+      void sPlayerMediaPlugin
+        .getState()
+        .then((state) => {
+          const pending = this.pendingSeek;
+          if (!pending || pending.id !== id) return;
+          const targetMs = pending.positionSeconds * 1000;
+          if (Math.abs(state.positionMs - targetMs) <= 1500) {
+            if (pending.timer) clearTimeout(pending.timer);
+            this.pendingSeek = null;
+            void sPlayerMediaPlugin.clearPendingSeek({ seekId: id }).catch(() => {});
+            this.applyState(state);
+            this.dispatch(AUDIO_EVENTS.TIME_UPDATE);
+            return;
+          }
+          if (state.playbackState === 2 && attempt < 5) {
+            this.scheduleSeekVerification(id, attempt + 1);
+            return;
+          }
+          this.recoverPendingSeek(id);
+        })
+        .catch((error) => this.recoverPendingSeek(id, error));
+    }, 2500);
+  }
+
   public destroy(): void {
+    if (this.pendingSeek?.timer) clearTimeout(this.pendingSeek.timer);
+    this.pendingSeek = null;
     void this.listenerHandle?.remove();
     this.listenerHandle = null;
     this.readyPromise = null;
@@ -128,6 +189,8 @@ export class Media3Player extends TypedEventTarget<AudioEventMap> implements IPl
   }
 
   public stop(): void {
+    if (this.pendingSeek?.timer) clearTimeout(this.pendingSeek.timer);
+    this.pendingSeek = null;
     this.isPaused = true;
     this.positionSeconds = 0;
     this.durationSeconds = 0;
@@ -136,10 +199,18 @@ export class Media3Player extends TypedEventTarget<AudioEventMap> implements IPl
   }
 
   public seek(time: number): void {
-    this.positionSeconds = Math.max(0, time);
-    void this.ready().then(() =>
-      sPlayerMediaPlugin.seekTo({ positionMs: this.positionSeconds * 1000 }),
-    );
+    const positionSeconds = Math.max(0, time);
+    const id = ++this.seekSequence;
+    if (this.pendingSeek) {
+      if (this.pendingSeek.timer) clearTimeout(this.pendingSeek.timer);
+      void sPlayerMediaPlugin.clearPendingSeek({ seekId: this.pendingSeek.id }).catch(() => {});
+    }
+    this.pendingSeek = { id, positionSeconds, timer: null };
+    this.scheduleSeekVerification(id);
+    this.positionSeconds = positionSeconds;
+    void this.ready()
+      .then(() => sPlayerMediaPlugin.seekTo({ positionMs: positionSeconds * 1000, seekId: id }))
+      .catch((error) => this.recoverPendingSeek(id, error));
   }
 
   public get duration(): number {

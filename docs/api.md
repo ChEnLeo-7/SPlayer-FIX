@@ -220,79 +220,10 @@
 - `GET /api/netease/login/cellphone?phone=xxx&password=xxx`
 - `GET /api/netease/user/playlist?uid=xxx`
 - `GET /api/netease/song/detail?ids=xxx`
+- `GET /api/netease/song/url/v1?id=186047&level=exhigh&unblock=true`
+- `GET /api/netease/song/url/match?id=186047`
 
 更多接口请参考 [NeteaseCloudMusicApi Enhanced 文档](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)
-
----
-
-## 解锁 API (Unblock API)
-
-**基础路径**: `/api/unblock`
-
-### 云音乐解锁
-
-**接口**: `GET /api/unblock/netease?id={songId}`
-
-**描述**: 获取网易云音乐解锁后的播放链接
-
-**请求参数**:
-
-- `id` (必需): 歌曲 ID
-
-**响应示例**:
-
-```json
-{
-  "code": 200,
-  "url": "https://..."
-}
-```
-
----
-
-### 酷我解锁
-
-**接口**: `GET /api/unblock/kuwo?keyword={keyword}`
-
-**描述**: 获取酷我音乐解锁后的播放链接
-
-**请求参数**:
-
-- `keyword` (必需): 搜索关键词（歌曲名-歌手名）
-- `songName` (可选): 歌曲名称，用于匹配校验
-- `artist` (可选): 歌手名称，用于匹配校验
-
-**响应示例**:
-
-```json
-{
-  "code": 200,
-  "url": "https://..."
-}
-```
-
----
-
-### 波点解锁
-
-**接口**: `GET /api/unblock/bodian?keyword={keyword}`
-
-**描述**: 获取波点音乐解锁后的播放链接
-
-**请求参数**:
-
-- `keyword` (必需): 搜索关键词（歌曲名-歌手名）
-- `songName` (可选): 歌曲名称，用于匹配校验
-- `artist` (可选): 歌手名称，用于匹配校验
-
-**响应示例**:
-
-```json
-{
-  "code": 200,
-  "url": "https://..."
-}
-```
 
 ---
 
@@ -313,10 +244,6 @@
     {
       "name": "NeteaseCloudMusicApi",
       "url": "/api/netease"
-    },
-    {
-      "name": "UnblockAPI",
-      "url": "/api/unblock"
     }
   ]
 }
@@ -397,7 +324,7 @@ print(response.json())
 1. 所有接口仅在应用程序运行时可用
 2. HTTP API 默认端口为 `25884`，可在环境变量 `VITE_SERVER_PORT` 中配置
 3. WebSocket API 默认端口为 `25885`，可在应用程序设置中修改
-4. 解锁接口仅供学习使用，请勿用于商业用途
+4. API Enhanced 解灰参数仅供学习测试，请勿用于商业用途
 5. 网易云音乐 API 需要登录后才能使用部分功能
 6. 接口响应时间取决于网络状况和服务器负载
 7. WebSocket 连接支持心跳检测（PING/PONG），建议客户端定期发送心跳以保持连接

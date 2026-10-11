@@ -14,7 +14,8 @@ interface SPlayerMediaPlugin {
   play(): Promise<void>;
   pause(): Promise<void>;
   stop(): Promise<void>;
-  seekTo(options: { positionMs: number }): Promise<void>;
+  seekTo(options: { positionMs: number; seekId: number }): Promise<void>;
+  clearPendingSeek(options: { seekId: number }): Promise<void>;
   setVolume(options: { value: number }): Promise<void>;
   setRate(options: { value: number }): Promise<void>;
   getState(): Promise<AndroidPlaybackEvent>;

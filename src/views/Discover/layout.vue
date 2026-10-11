@@ -42,6 +42,24 @@ const discoverType = ref<string>(
 .discover {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  .tabs {
+    width: 100%;
+    min-width: 0;
+    :deep(.n-tabs-nav-scroll-content) {
+      width: 100%;
+      min-width: 0;
+    }
+    :deep(.n-tabs-tab) {
+      flex: 1 1 0;
+      justify-content: center;
+      min-width: 0;
+      padding-inline: 8px;
+      white-space: nowrap;
+    }
+  }
   .title {
     display: flex;
     align-items: flex-end;
@@ -55,6 +73,18 @@ const discoverType = ref<string>(
       margin-right: 12px;
       line-height: normal;
     }
+  }
+  .router-view {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .discover .tabs :deep(.n-tabs-tab) {
+    padding-inline: 4px;
+    font-size: 13px;
   }
 }
 </style>

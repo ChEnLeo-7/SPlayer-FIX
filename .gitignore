@@ -9,6 +9,7 @@ lerna-debug.log*
 task.md
 
 node_modules
+.pnpm-store/
 .DS_Store
 dist
 dist-ssr
@@ -19,6 +20,8 @@ out
 target
 *.node
 data/
+releases/
+secrets/
 *.db-wal
 *.db-shm
 
@@ -49,6 +52,9 @@ docs/.vitepress/cache
 docs/.vitepress/dist
 
 # AI
+AGENTS.md
+CLAUDE.md
+*_plan.md
 .trae/*
 .cursor/*
 .claude/*

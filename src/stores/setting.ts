@@ -1,5 +1,4 @@
 import { TimeFormat } from "@/composables/useTimeFormat";
-import { SongUnlockServer } from "@/core/player/SongManager";
 import type { SongLevelType } from "@/types/main";
 import { defaultAMLLDbServer } from "@/utils/meta";
 import { defineStore } from "pinia";
@@ -102,8 +101,8 @@ export interface SettingState {
   cacheEnabled: boolean;
   /** 是否缓存歌曲（音频文件） */
   songCacheEnabled: boolean;
-  /** 音乐命名格式 */
-  fileNameFormat: "title" | "artist-title" | "title-artist";
+  /** 下载文件名模板 */
+  fileNameTemplate: string;
   /** 文件智能分类 */
   folderStrategy: "none" | "artist" | "artist-album";
   /** 下载元信息 */
@@ -170,8 +169,6 @@ export interface SettingState {
   replayGainMode: "track" | "album";
   /** 是否使用解灰 */
   useSongUnlock: boolean;
-  /** 歌曲解锁音源 */
-  songUnlockServer: { key: SongUnlockServer; enabled: boolean }[];
   /** 显示倒计时 */
   countDownShow: boolean;
   /** 显示歌词条 */
@@ -198,6 +195,8 @@ export interface SettingState {
   autoHidePlayerMeta: boolean;
   /** 记忆最后进度 */
   memoryLastSeek: boolean;
+  /** 播放界面左右滑动 */
+  enablePlayerSwipeGesture: boolean;
   /** 显示进度条悬浮信息 */
   progressTooltipShow: boolean;
   /** 进度调节吸附最近歌词 */
@@ -525,11 +524,6 @@ export const createDefaultSettingState = (): SettingState => ({
   enableReplayGain: false,
   replayGainMode: "track",
   useSongUnlock: true,
-  songUnlockServer: [
-    { key: SongUnlockServer.BODIAN, enabled: true },
-    { key: SongUnlockServer.NETEASE, enabled: true },
-    { key: SongUnlockServer.KUWO, enabled: false },
-  ],
   countDownShow: true,
   barLyricShow: true,
   timeFormat: "current-total",
@@ -543,6 +537,7 @@ export const createDefaultSettingState = (): SettingState => ({
   playerBackgroundRenderScale: 0.5,
   autoHidePlayerMeta: true,
   memoryLastSeek: true,
+  enablePlayerSwipeGesture: true,
   progressTooltipShow: true,
   progressAdjustLyric: false,
   showPlaylistCount: true,
@@ -620,7 +615,7 @@ export const createDefaultSettingState = (): SettingState => ({
   downloadThreadCount: 8,
   cacheEnabled: true,
   songCacheEnabled: true,
-  fileNameFormat: "title-artist",
+  fileNameTemplate: "{artist} - {title}",
   folderStrategy: "none",
   downloadMeta: true,
   downloadCover: true,
@@ -791,6 +786,7 @@ export const useSettingStore = defineStore("setting", {
           if (migration) {
             const migrationUpdates = migration(currentState);
             Object.assign(updates, migrationUpdates);
+            Object.assign(currentState, migrationUpdates);
           }
         }
         // 只 patch 需要更新的字段

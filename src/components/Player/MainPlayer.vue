@@ -275,11 +275,20 @@ const songManager = useSongManager();
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
 const playerRef = ref<HTMLElement | null>(null);
+const swipeBlocked = ref(false);
 
 // 触摸滑动切换歌曲
 const { direction } = useSwipe(playerRef, {
-  threshold: 50,
+  threshold: 90,
+  onSwipeStart: (event) => {
+    swipeBlocked.value =
+      !settingStore.enablePlayerSwipeGesture ||
+      (event.target instanceof Element && !!event.target.closest(".player-slider"));
+  },
   onSwipeEnd: () => {
+    const shouldHandle = settingStore.enablePlayerSwipeGesture && !swipeBlocked.value;
+    swipeBlocked.value = false;
+    if (!shouldHandle) return;
     if (direction.value === "left") {
       // 左滑
       player.nextOrPrev("next");
@@ -437,8 +446,9 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
   position: fixed;
   left: 0;
   bottom: -90px;
-  height: 80px;
-  padding: 0 15px;
+  height: calc(80px + var(--safe-area-inset-bottom));
+  padding: 0 calc(15px + var(--safe-area-inset-right)) var(--safe-area-inset-bottom)
+    calc(15px + var(--safe-area-inset-left));
   width: 100%;
   background-color: var(--surface-container-hex);
   display: grid;

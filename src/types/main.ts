@@ -45,7 +45,7 @@ export enum QualityType {
 }
 
 /** 音频源类型 */
-export type AudioSourceType = "official" | "netease" | "kuwo" | "bodian" | "local" | "streaming";
+export type AudioSourceType = "official" | "unblock" | "match" | "local" | "streaming";
 
 export type UserType = {
   id: number;
@@ -101,6 +101,8 @@ export type SongType = {
   createTime?: number;
   /** 更新时间 */
   updateTime?: number;
+  /** 发行时间 */
+  releaseDate?: number;
   /** 播放量 */
   playCount?: number;
   /**

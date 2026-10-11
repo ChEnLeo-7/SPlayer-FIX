@@ -49,6 +49,14 @@ test("账户 API 完整流程", async (context) => {
     rmSync(directory, { recursive: true, force: true });
   });
 
+  const health = await app.inject({ method: "GET", url: "/api/splayer/health" });
+  assert.equal(health.statusCode, 200);
+  assert.deepEqual(health.json(), {
+    name: "SPlayer",
+    status: "ok",
+    mobileApiVersion: 1,
+  });
+
   const registration = await app.inject({
     method: "POST",
     url: "/api/splayer/register",

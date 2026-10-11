@@ -1,12 +1,12 @@
 import { keywords, regexes } from "@/assets/data/exclude";
-import { SongUnlockServer } from "@/core/player/SongManager";
 import { defaultAMLLDbServer } from "@/utils/meta";
 import type { SettingState } from "../setting";
+import { migrateFileNameFormat } from "@/utils/fileNameTemplate";
 
 /**
  * 当前设置 Schema 版本号
  */
-export const CURRENT_SETTING_SCHEMA_VERSION = 12;
+export const CURRENT_SETTING_SCHEMA_VERSION = 13;
 
 /**
  * 迁移函数类型
@@ -25,15 +25,6 @@ export const settingMigrations: Record<number, MigrationFunction> = {
       // ttml 同步
       enableTTMLLyric: false,
       amllDbServer: defaultAMLLDbServer,
-    };
-  },
-  4: () => {
-    return {
-      songUnlockServer: [
-        { key: SongUnlockServer.BODIAN, enabled: true },
-        { key: SongUnlockServer.NETEASE, enabled: true },
-        { key: SongUnlockServer.KUWO, enabled: false },
-      ],
     };
   },
   5: (state) => {
@@ -190,12 +181,13 @@ export const settingMigrations: Record<number, MigrationFunction> = {
       uncensorMaskedProfanity: false,
     };
   },
-  12: (state) => {
-    // 移除已废弃的 gequbao 解锁源，清理老用户持久化设置中残留的条目
-    const servers = state.songUnlockServer;
-    if (!Array.isArray(servers)) return {};
+  13: (state) => {
+    const legacy = state as Partial<SettingState> & { fileNameFormat?: unknown };
     return {
-      songUnlockServer: servers.filter((s) => (s.key as string) !== "gequbao"),
+      fileNameTemplate:
+        typeof state.fileNameTemplate === "string" && state.fileNameTemplate.trim()
+          ? state.fileNameTemplate
+          : migrateFileNameFormat(legacy.fileNameFormat),
     };
   },
 };

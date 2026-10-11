@@ -5,6 +5,7 @@ import android.os.Bundle;
 import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
@@ -31,6 +32,7 @@ public final class PlaybackService extends MediaSessionService {
 
     private MediaSession mediaSession;
 
+    @UnstableApi
     @Override
     public void onCreate() {
         super.onCreate();

@@ -7,6 +7,12 @@ import { openLocalMusicDirectoryModal } from "@/utils/modal";
 import { pick } from "lodash-es";
 import LocalLyricDirectories from "../components/LocalLyricDirectories.vue";
 import CacheSizeLimit from "../components/CacheSizeLimit.vue";
+import FileNameTemplateSetting from "../components/FileNameTemplateSetting.vue";
+import { isNativeAndroid } from "@/utils/env";
+import {
+  ANDROID_DEFAULT_DOWNLOAD_DIRECTORY,
+  sPlayerDownloadPlugin,
+} from "@/platform/android/downloadPlugin";
 
 export const useLocalSettings = (): SettingConfig => {
   const statusStore = useStatusStore();
@@ -16,6 +22,7 @@ export const useLocalSettings = (): SettingConfig => {
   // --- 缓存逻辑 ---
   const cacheSizeDisplay = ref<string>("--");
   const cachePath = ref<string>("");
+  const androidCustomDownloadDirectory = ref(false);
 
   // 统计全部缓存目录占用大小
   const loadCacheSize = async () => {
@@ -38,7 +45,23 @@ export const useLocalSettings = (): SettingConfig => {
   };
 
   // 初始加载
+  const loadAndroidDownloadDirectory = async () => {
+    try {
+      const directory = await sPlayerDownloadPlugin.getDownloadDirectory();
+      settingStore.downloadPath = directory.displayName;
+      androidCustomDownloadDirectory.value = directory.custom;
+    } catch (error) {
+      console.error("读取 Android 下载目录失败:", error);
+      settingStore.downloadPath = ANDROID_DEFAULT_DOWNLOAD_DIRECTORY;
+      androidCustomDownloadDirectory.value = false;
+    }
+  };
+
   const onActivate = () => {
+    if (isNativeAndroid) {
+      void loadAndroidDownloadDirectory();
+      return;
+    }
     loadCacheSize();
     loadCachePath();
   };
@@ -121,12 +144,6 @@ export const useLocalSettings = (): SettingConfig => {
     }));
   });
 
-  const fileNameFormatOptions = [
-    { label: "歌曲名", value: "title" },
-    { label: "歌手 - 歌曲名", value: "artist-title" },
-    { label: "歌曲名 - 歌手", value: "title-artist" },
-  ];
-
   const folderStrategyOptions = [
     { label: "不分文件夹", value: "none" },
     { label: "按歌手分文件夹", value: "artist" },
@@ -184,8 +201,37 @@ export const useLocalSettings = (): SettingConfig => {
 
   // 更改下载目录
   const chooseDownloadPath = async () => {
+    if (isNativeAndroid) {
+      try {
+        const directory = await sPlayerDownloadPlugin.chooseDownloadDirectory();
+        if (directory.cancelled) return;
+        settingStore.downloadPath = directory.displayName;
+        androidCustomDownloadDirectory.value = directory.custom;
+        window.$message.success(`下载目录已更改为 ${directory.displayName}`);
+      } catch (error) {
+        console.error("选择 Android 下载目录失败:", error);
+        window.$message.error("无法更改下载目录");
+      }
+      return;
+    }
     const path = await window.electron.ipcRenderer.invoke("choose-path");
     if (path) settingStore.downloadPath = path;
+  };
+
+  const resetDownloadPath = async () => {
+    if (!isNativeAndroid) {
+      settingStore.downloadPath = "";
+      return;
+    }
+    try {
+      const directory = await sPlayerDownloadPlugin.resetDownloadDirectory();
+      settingStore.downloadPath = directory.displayName;
+      androidCustomDownloadDirectory.value = false;
+      window.$message.success("已恢复默认下载目录");
+    } catch (error) {
+      console.error("恢复 Android 默认下载目录失败:", error);
+      window.$message.error("无法恢复默认下载目录");
+    }
   };
 
   return {
@@ -193,6 +239,7 @@ export const useLocalSettings = (): SettingConfig => {
     groups: [
       {
         title: "本地歌曲",
+        show: !isNativeAndroid,
         items: [
           {
             key: "showLocalCover",
@@ -246,6 +293,7 @@ export const useLocalSettings = (): SettingConfig => {
       },
       {
         title: "缓存配置",
+        show: !isNativeAndroid,
         items: [
           {
             key: "cacheEnabled",
@@ -305,16 +353,24 @@ export const useLocalSettings = (): SettingConfig => {
             key: "downloadPath",
             label: "默认下载目录",
             type: "button",
-            description: computed(() => settingStore.downloadPath || "若不设置则无法进行下载"),
+            description: computed(() =>
+              isNativeAndroid
+                ? settingStore.downloadPath || ANDROID_DEFAULT_DOWNLOAD_DIRECTORY
+                : settingStore.downloadPath || "若不设置则无法进行下载",
+            ),
             buttonLabel: "更改",
             action: chooseDownloadPath,
             extraButton: {
-              label: "清除选择",
+              label: isNativeAndroid ? "恢复默认" : "清除选择",
               type: "primary",
               secondary: true,
               strong: true,
-              action: () => (settingStore.downloadPath = ""),
-              show: computed(() => !!settingStore.downloadPath),
+              action: resetDownloadPath,
+              show: computed(() =>
+                isNativeAndroid
+                  ? androidCustomDownloadDirectory.value
+                  : !!settingStore.downloadPath,
+              ),
             },
           },
           {
@@ -407,15 +463,11 @@ export const useLocalSettings = (): SettingConfig => {
             }),
           },
           {
-            key: "fileNameFormat",
-            label: "音乐命名格式",
-            type: "select",
-            description: "选择下载文件的命名方式，建议包含歌手信息便于区分",
-            options: fileNameFormatOptions,
-            value: computed({
-              get: () => settingStore.fileNameFormat,
-              set: (v) => (settingStore.fileNameFormat = v),
-            }),
+            key: "fileNameTemplate",
+            label: "下载文件名模板",
+            type: "custom",
+            description: "使用变量组合文件名，扩展名会根据实际音频格式自动添加",
+            component: markRaw(FileNameTemplateSetting),
           },
           {
             key: "folderStrategy",
@@ -423,6 +475,7 @@ export const useLocalSettings = (): SettingConfig => {
             type: "select",
             description: "自动按歌手或歌手与专辑创建子文件夹进行分类",
             options: folderStrategyOptions,
+            show: !isNativeAndroid,
             value: computed({
               get: () => settingStore.folderStrategy,
               set: (v) => (settingStore.folderStrategy = v),

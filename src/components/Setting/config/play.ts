@@ -1,11 +1,10 @@
 import type { VNodeChild } from "vue";
 import { useSettingStore } from "@/stores";
 import { usePlayerController } from "@/core/player/PlayerController";
-import { isElectron, checkIsolationSupport } from "@/utils/env";
+import { isElectron, isMobile, checkIsolationSupport } from "@/utils/env";
 import { renderOption } from "@/utils/helper";
 import { SettingConfig } from "@/types/settings";
 import { AI_AUDIO_LEVELS } from "@/utils/meta";
-import { openSongUnlockManager } from "@/utils/modal";
 import { NTooltip, SelectOption } from "naive-ui";
 import { uniqBy } from "lodash-es";
 
@@ -361,6 +360,17 @@ export const usePlaySettings = (): SettingConfig => {
             }),
           },
           {
+            key: "enablePlayerSwipeGesture",
+            label: "播放界面左右滑动",
+            type: "switch",
+            description: "在播放界面左右滑动切换歌曲或歌词页",
+            show: isMobile,
+            value: computed({
+              get: () => settingStore.enablePlayerSwipeGesture,
+              set: (v) => (settingStore.enablePlayerSwipeGesture = v),
+            }),
+          },
+          {
             key: "preventSleep",
             label: "阻止系统息屏",
             type: "switch",
@@ -668,27 +678,16 @@ export const usePlaySettings = (): SettingConfig => {
       },
       {
         title: "音乐解锁",
-        tags: [{ text: "Beta", type: "warning" }],
-        show: isElectron,
         items: [
           {
             key: "useSongUnlock",
             label: "音乐解锁",
             type: "switch",
-            description: "在无法正常播放时进行替换，可能会与原曲不符",
+            description: "官方地址不可用时，通过 API Enhanced 自动匹配可播放音源",
             value: computed({
               get: () => settingStore.useSongUnlock,
               set: (v) => (settingStore.useSongUnlock = v),
             }),
-          },
-          {
-            key: "songUnlockConfig",
-            label: "音源配置",
-            type: "button",
-            description: "配置歌曲解锁的音源顺序或是否启用",
-            buttonLabel: "配置",
-            action: openSongUnlockManager,
-            disabled: computed(() => !settingStore.useSongUnlock),
           },
         ],
       },

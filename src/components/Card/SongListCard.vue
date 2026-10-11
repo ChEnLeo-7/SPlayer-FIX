@@ -84,6 +84,7 @@ const songList = computed(() => sampleSize(props.data, 3));
   .content {
     display: flex;
     width: 100%;
+    min-width: 0;
     .cover {
       position: relative;
       display: flex;
@@ -124,6 +125,7 @@ const songList = computed(() => sampleSize(props.data, 3));
     }
     .info {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       justify-content: space-evenly;
@@ -132,6 +134,7 @@ const songList = computed(() => sampleSize(props.data, 3));
         text-align: center;
       }
       .name {
+        max-width: 100%;
         font-size: 18px;
         font-weight: bold;
       }

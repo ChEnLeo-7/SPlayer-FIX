@@ -253,18 +253,27 @@ const getListData = async (id: number | string): Promise<SongType[]> => {
 <style lang="scss" scoped>
 .cover-list {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 20px 4px;
   .cover-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
     gap: 20px;
     @media (max-width: 600px) {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
+    }
+    @media (max-width: 340px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
   .cover-item {
     position: relative;
+    min-width: 0;
+    max-width: 100%;
     height: auto;
     border-radius: 16px;
     z-index: 0;
@@ -362,8 +371,11 @@ const getListData = async (id: number | string): Promise<SongType[]> => {
     .cover-data {
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      max-width: 100%;
       padding: 12px;
       .name {
+        max-width: 100%;
         font-size: 16px;
         line-clamp: 2;
         -webkit-line-clamp: 2;
@@ -448,6 +460,9 @@ const getListData = async (id: number | string): Promise<SongType[]> => {
   &.video {
     .cover-grid {
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      @media (max-width: 600px) {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
     .cover-item {
       .cover {

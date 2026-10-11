@@ -275,7 +275,15 @@ onMounted(() => {
     }
     .rec-list {
       display: grid !important;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      > * {
+        min-width: 0;
+      }
+    }
+  }
+  @media (max-width: 360px) {
+    .rec-list {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }

@@ -82,7 +82,7 @@ export default defineConfig(({ mode }) => {
         Components({
           resolvers: [NaiveUiResolver()],
         }),
-        viteCompression(),
+        !isDockerBuild && viteCompression(),
         wasm(),
       ],
       resolve: commonResolve,

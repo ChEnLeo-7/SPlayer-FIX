@@ -1,5 +1,5 @@
 import { useSettingStore } from "@/stores";
-import { isElectron } from "@/utils/env";
+import { isElectron, isNativeAndroid } from "@/utils/env";
 import { SettingConfig } from "@/types/settings";
 import { computed, ref, h, markRaw } from "vue";
 import { debounce } from "lodash-es";
@@ -7,6 +7,7 @@ import { NA } from "naive-ui";
 import { disableDiscordRpc, enableDiscordRpc, updateDiscordConfig } from "@/core/player/PlayerIpc";
 import { getAuthToken, getAuthUrl, getSession } from "@/api/lastfm";
 import StreamingServerList from "../components/StreamingServerList.vue";
+import { openAndroidServer } from "@/utils/modal";
 
 export const useNetworkSettings = (): SettingConfig => {
   const settingStore = useSettingStore();
@@ -211,6 +212,20 @@ export const useNetworkSettings = (): SettingConfig => {
   return {
     onActivate,
     groups: [
+      {
+        title: "SPlayer 服务",
+        show: isNativeAndroid,
+        items: [
+          {
+            key: "androidServer",
+            label: "SPlayer 服务端",
+            type: "button",
+            description: "查看或更换 Android App 当前连接的服务地址",
+            buttonLabel: "更换服务器",
+            action: openAndroidServer,
+          },
+        ],
+      },
       {
         title: "流媒体服务",
         items: [

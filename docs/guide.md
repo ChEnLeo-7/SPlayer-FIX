@@ -46,6 +46,30 @@ docker run -d --name SPlayer -p 25884:25884 imsyy/splayer:latest
 
 启动成功后访问 `http://localhost:25884`
 
+#### 歌曲解析专用 Cookie
+
+如需仅在歌曲 URL 解析时使用服务端网易云 Cookie，可创建 Docker Secret 文件：
+
+```bash
+mkdir -p secrets
+printf '%s\n' 'MUSIC_U=替换为新的Cookie' > secrets/netease-playback-cookie
+chmod 600 secrets/netease-playback-cookie
+```
+
+然后取消 `docker-compose.yml` 中 `netease_playback_cookie` 对应的两处注释并重建容器。该 Cookie 只会注入 `/api/netease/song/url/v1` 和 `/api/netease/song/url`，不会用于歌单、收藏、推荐或账号接口，也不会下发到浏览器。请勿设置全局 `NETEASE_COOKIE`。
+
+Android 客户端连接 HTTP 服务时不会持久化 SPlayer 账户保险库密钥，每次启动后需要手动解锁。若需要设备自动解锁，请为服务配置可信 HTTPS，避免远程页面或局域网中间人读取账户密钥。
+
+#### Music Together UNM 兼容代理
+
+设置 `SPLAYER_MUSIC_TOGETHER_UNM_ENABLED=true` 并映射 `16380:16380` 后，Music Together 的 `UNM_SERVER_URL` 可填写：
+
+```text
+http://NAS地址:16380
+```
+
+两个容器位于同一个 Docker 网络时，也可填写 `http://SPlayer:16380`。该端口使用严格模式，只允许网易云及相关媒体域名，不是网页或 REST API；不要暴露到公网。
+
 ### Vercel 部署
 
 1. 先部署 [NeteaseCloudMusicApi](https://github.com/neteasecloudmusicapienhanced/api-enhanced) 并获取 API 地址

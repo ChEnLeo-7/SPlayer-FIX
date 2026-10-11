@@ -10,7 +10,7 @@
 
     <!-- 主内容 -->
     <div
-      :class="['mobile-content', { swiping: isSwiping }]"
+      :class="['mobile-content', { swiping: isPlayerSwiping }]"
       :style="{ transform: contentTransform }"
       @click.stop
     >
@@ -187,6 +187,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
 const mobileStart = ref<HTMLElement | null>(null);
 const pageIndex = ref(0);
+const swipeBlocked = ref(false);
 
 const hasLyric = computed(() => {
   return musicStore.isHasLrc && musicStore.playSong.type !== "radio";
@@ -205,35 +206,38 @@ watch(hasLyric, (val) => {
   if (!val) pageIndex.value = 0;
 });
 
-// 滑动偏移量
-const swipeOffset = ref(0);
-
 const { direction, isSwiping, lengthX } = useSwipe(mobileStart, {
-  threshold: 10,
-  onSwipe: () => {
-    if (!hasLyric.value) return;
-    // 为正表示向左滑，为负表示向右滑
-    swipeOffset.value = lengthX.value;
+  threshold: 30,
+  onSwipeStart: (event) => {
+    swipeBlocked.value =
+      !settingStore.enablePlayerSwipeGesture ||
+      (event.target instanceof Element && !!event.target.closest(".player-slider"));
   },
   onSwipeEnd: () => {
-    if (!hasLyric.value) {
-      swipeOffset.value = 0;
-      return;
-    }
+    const shouldHandle =
+      settingStore.enablePlayerSwipeGesture && !swipeBlocked.value && hasLyric.value;
+    if (!shouldHandle) return;
     // 超过阈值则切换页面
     if (direction.value === "left" && lengthX.value > 100) {
       pageIndex.value = 1;
     } else if (direction.value === "right" && lengthX.value < -100) {
       pageIndex.value = 0;
     }
-    swipeOffset.value = 0;
   },
 });
+
+const isPlayerSwiping = computed(
+  () =>
+    settingStore.enablePlayerSwipeGesture &&
+    !swipeBlocked.value &&
+    hasLyric.value &&
+    isSwiping.value,
+);
 
 // 计算实时的变换位置
 const contentTransform = computed(() => {
   const baseOffset = pageIndex.value * 50; // 百分比
-  if (!isSwiping.value || !hasLyric.value) {
+  if (!isPlayerSwiping.value) {
     return `translateX(-${baseOffset}%)`;
   }
   let pixelOffset = lengthX.value;
@@ -273,7 +277,8 @@ const contentTransform = computed(() => {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: var(--safe-area-top) var(--page-inline-space) 0;
+    padding: var(--safe-area-top) calc(var(--page-inline-space) + var(--safe-area-inset-right)) 0
+      calc(var(--page-inline-space) + var(--safe-area-inset-left));
     z-index: 10;
     .btn {
       width: 40px;
@@ -315,8 +320,10 @@ const contentTransform = computed(() => {
       display: grid;
       grid-template-rows: minmax(var(--cover-min-size), 1fr) auto;
       align-items: stretch;
-      padding: calc(var(--safe-area-top) + var(--top-bar-height)) var(--page-inline-space)
-        calc(var(--safe-area-bottom) + var(--pagination-space));
+      padding: calc(var(--safe-area-top) + var(--top-bar-height))
+        calc(var(--page-inline-space) + var(--safe-area-inset-right))
+        calc(var(--safe-area-bottom) + var(--pagination-space))
+        calc(var(--page-inline-space) + var(--safe-area-inset-left));
       overflow-y: auto;
       overscroll-behavior: contain;
       scrollbar-width: none;
@@ -486,8 +493,10 @@ const contentTransform = computed(() => {
       }
     }
     .lyric-page {
-      padding: calc(var(--safe-area-top) + var(--top-bar-height)) var(--page-inline-space)
-        calc(var(--safe-area-bottom) + var(--pagination-space));
+      padding: calc(var(--safe-area-top) + var(--top-bar-height))
+        calc(var(--page-inline-space) + var(--safe-area-inset-right))
+        calc(var(--safe-area-bottom) + var(--pagination-space))
+        calc(var(--page-inline-space) + var(--safe-area-inset-left));
       display: flex;
       flex-direction: column;
       .lyric-header {

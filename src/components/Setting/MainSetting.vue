@@ -133,7 +133,7 @@ import { SettingItem, SettingGroup } from "@/types/settings";
 import type { SettingType } from "@/types/main";
 import { useMobile } from "@/composables/useMobile";
 import { renderIcon } from "@/utils/helper";
-import { isElectron } from "@/utils/env";
+import { isElectron, isNativeAndroid } from "@/utils/env";
 import { useStatusStore } from "@/stores";
 import { getDisplayVersion, isNightly } from "@/utils/version";
 import packageJson from "@/../package.json";
@@ -230,7 +230,7 @@ const searchOptions = computed<SelectOption[]>(() => {
   const options: SelectOption[] = [];
   allSettingGroups.value.forEach(({ key, groups }) => {
     // 分类是否显示
-    const menuOption = menuOptions.find((m) => m.key === key);
+    const menuOption = menuOptions.value.find((m) => m.key === key);
     if (menuOption?.show === false) return;
     // 检查分组可见性
     groups.forEach((group: SettingGroup) => {
@@ -298,7 +298,7 @@ const handleSearch = (value: string | number) => {
 };
 
 // 菜单内容
-const menuOptions: MenuOption[] = [
+const menuOptions = computed<MenuOption[]>(() => [
   {
     key: "general",
     label: "常规设置",
@@ -321,8 +321,8 @@ const menuOptions: MenuOption[] = [
   },
   {
     key: "local",
-    label: "本地与缓存",
-    show: isElectron,
+    label: isNativeAndroid ? "下载设置" : "本地与缓存",
+    show: isElectron || (isNativeAndroid && statusStore.isDeveloperMode),
     icon: renderIcon("Storage"),
   },
   {
@@ -341,7 +341,7 @@ const menuOptions: MenuOption[] = [
     label: "关于与鸣谢",
     icon: renderIcon("Info"),
   },
-];
+]);
 
 // 跳转
 const toGithub = () => {
@@ -542,10 +542,28 @@ onMounted(() => {
         }
       }
       .set-item {
+        .n-card__content {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 14px;
+          padding: 14px;
+        }
+        .label {
+          width: 100%;
+          min-width: 0;
+          padding-right: 0;
+        }
+        .control-wrapper {
+          width: 100%;
+          min-width: 0;
+          flex-wrap: wrap;
+          justify-content: flex-start;
+        }
         .set {
-          @media (max-width: 768px) {
-            width: 140px;
-            min-width: 140px;
+          width: 100%;
+          min-width: 0;
+          &.n-switch {
+            width: max-content;
           }
         }
       }

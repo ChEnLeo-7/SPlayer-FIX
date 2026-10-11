@@ -4,7 +4,7 @@ import {
   BaseAudioPlayer,
   type AudioEventType,
 } from "./BaseAudioPlayer";
-import type { EngineCapabilities } from "./IPlaybackEngine";
+import type { EngineCapabilities, FadeCurve } from "./IPlaybackEngine";
 import { useSettingStore } from "@/stores";
 
 /**
@@ -16,8 +16,14 @@ import { useSettingStore } from "@/stores";
 export class AudioElementPlayer extends BaseAudioPlayer {
   /** 内部 Audio 元素 */
   private audioElement: HTMLAudioElement;
+  /** 接入 Web Audio 图谱的 Audio 元素 */
+  private readonly graphAudioElement: HTMLAudioElement;
   /** MediaElementAudioSourceNode 用于连接 Web Audio API */
   private sourceNode: MediaElementAudioSourceNode | null = null;
+  /** 当前输出设备 */
+  private sinkId = "default";
+  /** 直连回退任务 */
+  private directPlaybackPromise: Promise<void> | null = null;
 
   /** Seek 锁，用于在 seek 过程中返回稳定的 currentTime */
   private isInternalSeeking = false;
@@ -34,13 +40,10 @@ export class AudioElementPlayer extends BaseAudioPlayer {
 
   constructor() {
     super();
-    this.audioElement = new Audio();
-    this.audioElement.crossOrigin = "anonymous";
-    this.bindInternalEvents();
-
-    this.audioElement.addEventListener("seeked", () => {
-      this.isInternalSeeking = false;
-    });
+    this.graphAudioElement = new Audio();
+    this.graphAudioElement.crossOrigin = "anonymous";
+    this.audioElement = this.graphAudioElement;
+    this.bindInternalEvents(this.graphAudioElement);
   }
 
   /**
@@ -52,7 +55,7 @@ export class AudioElementPlayer extends BaseAudioPlayer {
 
     try {
       if (!this.sourceNode) {
-        this.sourceNode = this.audioCtx.createMediaElementSource(this.audioElement);
+        this.sourceNode = this.audioCtx.createMediaElementSource(this.graphAudioElement);
       } else {
         this.sourceNode.disconnect();
       }
@@ -69,6 +72,14 @@ export class AudioElementPlayer extends BaseAudioPlayer {
    * @param url 音频地址
    */
   public async load(url: string): Promise<void> {
+    if (this.audioElement !== this.graphAudioElement) {
+      const directAudioElement = this.audioElement;
+      this.audioElement = this.graphAudioElement;
+      directAudioElement.pause();
+      directAudioElement.removeAttribute("src");
+      directAudioElement.load();
+    }
+    this.directPlaybackPromise = null;
     this.audioElement.src = url;
     this.audioElement.load();
   }
@@ -78,7 +89,19 @@ export class AudioElementPlayer extends BaseAudioPlayer {
    * @returns 播放 Promise
    */
   protected async doPlay(): Promise<void> {
-    return this.audioElement.play();
+    const playbackElement = this.audioElement;
+    try {
+      await playbackElement.play();
+    } catch (error) {
+      if (playbackElement !== this.graphAudioElement) throw error;
+      if (this.directPlaybackPromise) {
+        await this.directPlaybackPromise;
+        return;
+      }
+      if (this.audioElement !== this.graphAudioElement) return;
+      if (!this.shouldUseDirectPlayback(error)) throw error;
+      await this.startDirectPlayback();
+    }
   }
 
   /**
@@ -174,9 +197,40 @@ export class AudioElementPlayer extends BaseAudioPlayer {
    * @param deviceId 设备 ID
    */
   protected async doSetSinkId(deviceId: string): Promise<void> {
+    this.sinkId = deviceId;
     if (typeof this.audioElement.setSinkId === "function") {
       await this.audioElement.setSinkId(deviceId);
     }
+  }
+
+  /** 设置音频输出设备 */
+  public override async setSinkId(deviceId: string): Promise<void> {
+    this.sinkId = deviceId;
+    if (this.audioElement !== this.graphAudioElement) {
+      if (typeof this.audioElement.setSinkId === "function") {
+        await this.audioElement.setSinkId(deviceId);
+      }
+      return;
+    }
+    await super.setSinkId(deviceId);
+  }
+
+  /** 设置音量 */
+  public override setVolume(value: number): void {
+    super.setVolume(value);
+    this.syncDirectVolume();
+  }
+
+  /** 设置 ReplayGain */
+  public override setReplayGain(gain: number): void {
+    super.setReplayGain(gain);
+    this.syncDirectVolume();
+  }
+
+  /** 设置目标音量 */
+  public override rampVolumeTo(value: number, duration: number, curve?: FadeCurve): void {
+    super.rampVolumeTo(value, duration, curve);
+    this.syncDirectVolume();
   }
 
   /** 获取当前音频源地址 */
@@ -203,7 +257,7 @@ export class AudioElementPlayer extends BaseAudioPlayer {
 
     let autoLatency = 0;
 
-    if (isPlayback && this.audioCtx) {
+    if (isPlayback && this.audioCtx && this.audioElement === this.graphAudioElement) {
       autoLatency = (this.audioCtx.outputLatency || 0) + (this.audioCtx.baseLatency || 0);
     }
     const manualCompensation = isPlayback ? this.audioDelayCompensation / 1000 : 0;
@@ -240,12 +294,18 @@ export class AudioElementPlayer extends BaseAudioPlayer {
    * 监听原生 DOM 事件并转发为标准事件
    * 将 HTMLAudioElement 的事件转换为 BaseAudioPlayer 的统一事件格式
    */
-  private bindInternalEvents() {
+  private bindInternalEvents(element: HTMLAudioElement) {
+    element.addEventListener("seeked", () => {
+      if (element === this.audioElement) this.isInternalSeeking = false;
+    });
+
     const events: AudioEventType[] = Object.values(AUDIO_EVENTS);
 
     events.forEach((eventType) => {
-      this.audioElement.addEventListener(eventType, (e) => {
+      element.addEventListener(eventType, (e) => {
+        if (element !== this.audioElement) return;
         if (eventType === AUDIO_EVENTS.ERROR) {
+          if (this.shouldUseDirectPlayback()) return;
           this.dispatch(AUDIO_EVENTS.ERROR, {
             originalEvent: e,
             errorCode: this.getErrorCode(),
@@ -255,5 +315,75 @@ export class AudioElementPlayer extends BaseAudioPlayer {
         }
       });
     });
+  }
+
+  /** 判断是否可绕过跨域限制直连播放 */
+  private shouldUseDirectPlayback(error?: unknown): boolean {
+    if (this.audioElement !== this.graphAudioElement) return false;
+    const url = this.graphAudioElement.currentSrc || this.graphAudioElement.src;
+    if (!/^https?:\/\//i.test(url)) return false;
+
+    try {
+      if (new URL(url).origin === window.location.origin) return false;
+    } catch {
+      return false;
+    }
+
+    return (
+      this.graphAudioElement.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED ||
+      (error instanceof DOMException && error.name === "NotSupportedError")
+    );
+  }
+
+  /** 使用不接入 Web Audio 图谱的元素播放无 CORS 音源 */
+  private async switchToDirectPlayback(): Promise<void> {
+    const source = this.graphAudioElement.currentSrc || this.graphAudioElement.src;
+    const seekTime = this.isInternalSeeking
+      ? this.targetSeekTime
+      : this.graphAudioElement.currentTime || 0;
+    const directAudioElement = new Audio();
+
+    directAudioElement.playbackRate = this.graphAudioElement.playbackRate;
+    directAudioElement.defaultPlaybackRate = this.graphAudioElement.defaultPlaybackRate;
+    directAudioElement.volume = Math.min(1, this.volume * this.replayGain);
+    this.bindInternalEvents(directAudioElement);
+    this.audioElement = directAudioElement;
+
+    this.graphAudioElement.pause();
+    this.graphAudioElement.removeAttribute("src");
+    this.graphAudioElement.load();
+
+    directAudioElement.src = source;
+    if (seekTime > 0) {
+      directAudioElement.addEventListener(
+        "loadedmetadata",
+        () => {
+          directAudioElement.currentTime = seekTime;
+        },
+        { once: true },
+      );
+    }
+    if (this.sinkId !== "default" && typeof directAudioElement.setSinkId === "function") {
+      await directAudioElement.setSinkId(this.sinkId);
+    }
+
+    console.warn("[AudioElementPlayer] 音源不支持 CORS，已回退到原生直连播放");
+    await directAudioElement.play();
+  }
+
+  /** 合并并发的直连回退请求 */
+  private startDirectPlayback(): Promise<void> {
+    if (!this.directPlaybackPromise) {
+      this.directPlaybackPromise = this.switchToDirectPlayback().finally(() => {
+        this.directPlaybackPromise = null;
+      });
+    }
+    return this.directPlaybackPromise;
+  }
+
+  /** 同步绕过 Web Audio 图谱时的音量 */
+  private syncDirectVolume(): void {
+    if (this.audioElement === this.graphAudioElement) return;
+    this.audioElement.volume = Math.min(1, this.volume * this.replayGain);
   }
 }

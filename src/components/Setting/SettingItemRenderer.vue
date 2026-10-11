@@ -406,4 +406,48 @@ const activeActions = computed(() => {
     min-width: 140px;
   }
 }
+
+@media (max-width: 768px) {
+  :deep(.n-card__content) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .label {
+    width: 100%;
+    min-width: 0;
+    padding-right: 0;
+
+    .name {
+      display: flex;
+      flex-wrap: wrap;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .tip {
+      margin-top: 4px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .control-wrapper {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .set {
+    width: 100%;
+    min-width: 0;
+
+    &.n-switch {
+      width: max-content;
+    }
+  }
+}
 </style>

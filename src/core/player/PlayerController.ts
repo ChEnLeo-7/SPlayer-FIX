@@ -197,6 +197,7 @@ class PlayerController {
 
     musicStore.playSong = song;
     statusStore.currentTime = startSeek;
+    statusStore.duration = song.duration || 0;
     // 重置进度
     statusStore.progress = 0;
     statusStore.lyricIndex = -1;
@@ -391,53 +392,6 @@ class PlayerController {
       console.error("❌ 切换音质失败:", error);
       statusStore.playLoading = false;
       window.$message.error("切换音质失败");
-    }
-  }
-
-  /**
-   * 切换音频源
-   * @param source 音频源标识
-   */
-  public async switchAudioSource(source: string) {
-    const statusStore = useStatusStore();
-    const songManager = useSongManager();
-    const musicStore = useMusicStore();
-    const audioManager = useAudioManager();
-    const playSongData = musicStore.playSong;
-    if (!playSongData || playSongData.path) return;
-    try {
-      statusStore.playLoading = true;
-      // 清除预取缓存
-      songManager.clearPrefetch();
-      // 获取新音频源
-      const audioSource = await songManager.getAudioSource(playSongData, source);
-      if (!audioSource.url) {
-        window.$message.error("切换音频源失败：无法获取播放链接");
-        statusStore.playLoading = false;
-        return;
-      }
-      console.log(`🔄 [${playSongData.id}] 切换音频源:`, audioSource);
-      // 更新状态
-      statusStore.songQuality = audioSource.quality;
-      statusStore.audioSource = audioSource.source;
-      // 保持当前进度和播放状态
-      const seek = statusStore.currentTime;
-      const shouldAutoPlay = statusStore.playStatus;
-      // 停止当前播放
-      audioManager.stop();
-      await this.loadAndPlay(
-        audioSource.url,
-        shouldAutoPlay,
-        seek,
-        undefined,
-        1,
-        createAndroidMediaItem(playSongData, audioSource.url),
-      );
-      statusStore.playLoading = false;
-    } catch (error) {
-      console.error("❌ 切换音频源失败:", error);
-      statusStore.playLoading = false;
-      window.$message.error("切换音频源失败");
     }
   }
 
@@ -1081,7 +1035,8 @@ class PlayerController {
     }
     const statusStore = useStatusStore();
     const audioManager = useAudioManager();
-    const safeTime = Math.max(0, Math.min(time, this.getDuration()));
+    const duration = this.getDuration();
+    const safeTime = duration > 0 ? Math.max(0, Math.min(time, duration)) : Math.max(0, time);
     audioManager.seek(safeTime / 1000);
     statusStore.currentTime = safeTime;
     mediaSessionManager.updateState(this.getDuration(), safeTime, true);

@@ -3,6 +3,7 @@ import type { ShortcutStore } from "../stores/shortcut";
 import type { StatusState } from "../stores/status";
 import type { SPlayerPreferencesSnapshot } from "../types/account";
 import { cloneDeep } from "lodash-es";
+import { migrateFileNameFormat, validateFileNameTemplate } from "./fileNameTemplate";
 
 const SETTING_KEYS = [
   "themeMode",
@@ -41,7 +42,7 @@ const SETTING_KEYS = [
   "uncensorMaskedProfanity",
   "bracketReplacementPreset",
   "customBracketReplacement",
-  "fileNameFormat",
+  "fileNameTemplate",
   "folderStrategy",
   "downloadMeta",
   "downloadCover",
@@ -55,7 +56,9 @@ const SETTING_KEYS = [
   "downloadLyricEncoding",
   "downloadSongLevel",
   "songLevel",
+  "useSongUnlock",
   "autoPlay",
+  "useNextPrefetch",
   "songVolumeFade",
   "songVolumeFadeTime",
   "enableReplayGain",
@@ -66,14 +69,18 @@ const SETTING_KEYS = [
   "playerType",
   "commentDisplayMode",
   "playerBackgroundType",
+  "playerBackgroundFps",
   "playerBackgroundFlowSpeed",
   "playerBackgroundPause",
   "playerBackgroundLowFreqVolume",
+  "playerBackgroundRenderScale",
   "autoHidePlayerMeta",
   "memoryLastSeek",
+  "enablePlayerSwipeGesture",
   "progressTooltipShow",
   "progressAdjustLyric",
   "showPlaylistCount",
+  "showSpectrums",
   "lyricsBlur",
   "lyricsBlendMode",
   "playSongDemo",
@@ -121,6 +128,7 @@ const SETTING_KEYS = [
   "homePageSections",
   "playerFollowCoverColor",
   "progressLyricShow",
+  "dynamicCover",
   "playerStyleRatio",
   "playerFullscreenGradient",
   "disableAiAudio",
@@ -162,7 +170,6 @@ const SETTING_ENUMS: Partial<Record<(typeof SETTING_KEYS)[number], readonly unkn
   lyricTransition: ["slide", "fade"],
   lyricsPosition: ["flex-start", "center", "flex-end"],
   bracketReplacementPreset: ["dash", "angleBrackets", "cornerBrackets", "custom"],
-  fileNameFormat: ["title", "artist-title", "title-artist"],
   folderStrategy: ["none", "artist", "artist-album"],
   downloadLyricEncoding: ["utf-8", "gbk", "utf-16", "iso-8859-1"],
   downloadSongLevel: ["l", "m", "h", "sq", "hr", "jyeffect", "sky", "jymaster"],
@@ -190,6 +197,8 @@ const SETTING_NUMBER_RANGES: Partial<
   lyricHorizontalOffset: [-100, 100],
   songVolumeFadeTime: [0, 10_000],
   playerBackgroundFlowSpeed: [0, 20],
+  playerBackgroundFps: [1, 120],
+  playerBackgroundRenderScale: [0.1, 1],
   wordFadeWidth: [0, 2],
   lyricOffsetStep: [50, 10_000],
   playerStyleRatio: [0, 100],
@@ -248,7 +257,16 @@ const sanitizeSetting = (value: unknown, defaults: SettingState): Record<string,
     SETTING_KEYS.map((key) => {
       const allowedValues = SETTING_ENUMS[key];
       const allowedRange = SETTING_NUMBER_RANGES[key];
-      const candidate = source[key];
+      const candidate =
+        key === "fileNameTemplate" && typeof source[key] !== "string"
+          ? migrateFileNameFormat(source.fileNameFormat)
+          : source[key];
+      if (
+        key === "fileNameTemplate" &&
+        (typeof candidate !== "string" || validateFileNameTemplate(candidate))
+      ) {
+        return [key, cloneDeep(defaults[key])];
+      }
       if (allowedValues && !allowedValues.includes(candidate))
         return [key, cloneDeep(defaults[key])];
       if (
@@ -276,6 +294,18 @@ const sanitizeStatus = (value: unknown, defaults: StatusState): Record<string, u
     listSortOrder: SORT_ORDERS.includes(String(source.listSortOrder))
       ? source.listSortOrder
       : defaults.listSortOrder,
+    playIndex:
+      Number.isSafeInteger(source.playIndex) && Number(source.playIndex) >= -1
+        ? source.playIndex
+        : defaults.playIndex,
+    playListShow:
+      typeof source.playListShow === "boolean" ? source.playListShow : defaults.playListShow,
+    showFullPlayer:
+      typeof source.showFullPlayer === "boolean" ? source.showFullPlayer : defaults.showFullPlayer,
+    showPlayerComment:
+      typeof source.showPlayerComment === "boolean"
+        ? source.showPlayerComment
+        : defaults.showPlayerComment,
   };
 };
 
@@ -284,6 +314,9 @@ const sanitizeShortcut = (value: unknown, defaults: ShortcutStore): Record<strin
   return Object.fromEntries(
     Object.entries(defaults.shortcutList).map(([key, shortcut]) => {
       const candidate = source[key];
+      if (key === "playOrPause" && candidate === "CmdOrCtrl+Space") {
+        return [key, "Space"];
+      }
       return [
         key,
         typeof candidate === "string" && candidate.length <= 100 ? candidate : shortcut.shortcut,

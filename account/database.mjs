@@ -44,6 +44,62 @@ const migrations = [
   `
     ALTER TABLE encryptions ADD COLUMN recovery_verifier TEXT;
   `,
+  `
+    CREATE TABLE account_sync_state (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      sync_version INTEGER NOT NULL DEFAULT 1 CHECK (sync_version IN (1, 2)),
+      head_cursor INTEGER NOT NULL DEFAULT 0 CHECK (head_cursor >= 0),
+      operation_count INTEGER NOT NULL DEFAULT 0 CHECK (operation_count >= 0),
+      operation_bytes INTEGER NOT NULL DEFAULT 0 CHECK (operation_bytes >= 0),
+      migrated_at INTEGER,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE vault_operations (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      cursor INTEGER NOT NULL CHECK (cursor > 0),
+      operation_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      device_seq INTEGER NOT NULL CHECK (device_seq > 0),
+      base_cursor INTEGER NOT NULL CHECK (base_cursor >= 0),
+      nonce TEXT NOT NULL,
+      ciphertext TEXT NOT NULL,
+      byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, cursor),
+      UNIQUE (user_id, operation_id)
+    );
+
+    CREATE INDEX vault_operations_user_device_idx
+      ON vault_operations(user_id, device_id, device_seq DESC);
+
+    INSERT INTO account_sync_state (user_id, updated_at)
+      SELECT id, updated_at FROM users;
+  `,
+  `
+    CREATE TABLE vault_operations_v2 (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      cursor INTEGER NOT NULL CHECK (cursor > 0),
+      operation_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      device_seq INTEGER NOT NULL CHECK (device_seq > 0),
+      base_cursor INTEGER NOT NULL CHECK (base_cursor >= 0),
+      nonce TEXT NOT NULL,
+      ciphertext TEXT NOT NULL,
+      byte_size INTEGER NOT NULL CHECK (byte_size > 0),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, cursor),
+      UNIQUE (user_id, operation_id)
+    );
+
+    INSERT INTO vault_operations_v2
+      SELECT * FROM vault_operations;
+    DROP TABLE vault_operations;
+    ALTER TABLE vault_operations_v2 RENAME TO vault_operations;
+
+    CREATE INDEX vault_operations_user_device_idx
+      ON vault_operations(user_id, device_id, device_seq DESC);
+  `,
 ];
 
 export function openDatabase(databasePath) {

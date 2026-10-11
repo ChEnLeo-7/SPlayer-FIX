@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store
 npm-debug.log
 Dockerfile*
 docker-compose*
@@ -10,7 +11,13 @@ README.md
 LICENSE
 .vscode
 dist
-data
+out
+/data
+/releases
+/secrets
+android/.gradle
+android/build
+android/app/build
 *.db
 *.db-wal
 *.db-shm

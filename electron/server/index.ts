@@ -2,7 +2,6 @@ import { join } from "path";
 import { isDev } from "../main/utils/config";
 import { serverLog } from "../main/logger";
 import { initNcmAPI } from "./netease";
-import { initUnblockAPI } from "./unblock";
 import { initControlAPI } from "./control";
 import { initQQMusicAPI } from "./qqmusic";
 import fastifyCookie from "@fastify/cookie";
@@ -41,10 +40,6 @@ const initAppServer = async () => {
             url: "/api/netease",
           },
           {
-            name: "UnblockAPI",
-            url: "/api/unblock",
-          },
-          {
             name: "ControlAPI",
             url: "/api/control",
           },
@@ -57,7 +52,6 @@ const initAppServer = async () => {
     });
     // 注册接口
     server.register(initNcmAPI, { prefix: "/api" });
-    server.register(initUnblockAPI, { prefix: "/api" });
     server.register(initControlAPI, { prefix: "/api" });
     server.register(initQQMusicAPI, { prefix: "/api" });
     const accountUpstream = process.env["SPLAYER_ACCOUNT_UPSTREAM"];

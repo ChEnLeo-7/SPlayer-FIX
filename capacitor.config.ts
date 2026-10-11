@@ -1,23 +1,21 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const serverUrl = process.env.SPLAYER_ANDROID_SERVER_URL || "http://192.168.2.109:14558";
-
 const config: CapacitorConfig = {
   appId: "io.github.chenleo7.splayerfix",
   appName: "SPlayer",
   webDir: "dist/android",
   server: {
-    url: serverUrl,
-    cleartext: serverUrl.startsWith("http://"),
+    cleartext: true,
   },
   android: {
-    allowMixedContent: serverUrl.startsWith("http://"),
     backgroundColor: "#101114",
+    useLegacyBridge: true,
   },
   plugins: {
     SystemBars: {
-      insetsHandling: "css",
+      insetsHandling: "disable",
       initialViewportFitValueHint: "cover",
+      style: "DARK",
     },
   },
 };

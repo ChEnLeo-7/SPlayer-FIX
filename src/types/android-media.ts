@@ -18,6 +18,8 @@ export type AndroidPlaybackEventType =
   | "ended"
   | "emptied"
   | "error"
+  | "seeking"
+  | "seeked"
   | "timeupdate";
 
 export interface AndroidPlaybackEvent {
@@ -29,4 +31,6 @@ export interface AndroidPlaybackEvent {
   playbackState: number;
   errorCode?: number;
   message?: string;
+  seekId?: number;
+  requestedPositionMs?: number;
 }

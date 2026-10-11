@@ -167,6 +167,23 @@ export const openSplayerAccount = async () => {
   });
 };
 
+/** 打开 Android 服务端配置 */
+export const openAndroidServer = async () => {
+  if (isModalOpen("androidServer", "服务端配置已打开")) return;
+  setModalOpen("androidServer");
+  const { default: AndroidServer } = await import("@/components/Modal/Setting/AndroidServer.vue");
+  const modal = window.$modal.create({
+    preset: "card",
+    title: "SPlayer 服务端",
+    transformOrigin: "center",
+    autoFocus: false,
+    maskClosable: false,
+    style: { width: "480px", maxWidth: "calc(100vw - 32px)" },
+    content: () => h(AndroidServer, { onClose: () => modal.destroy() }),
+    onAfterLeave: () => setModalClosed("androidServer"),
+  });
+};
+
 /**
  * 跳转到歌手
  * @param data 歌手信息
@@ -480,22 +497,6 @@ export const openDescModal = (content: string, title: string = "歌单简介") =
             h("div", { style: { whiteSpace: "pre-wrap" } }, { default: () => content }),
         },
       );
-    },
-  });
-};
-
-/** 打开音源管理弹窗 */
-export const openSongUnlockManager = async () => {
-  const { default: SongUnlockManager } =
-    await import("@/components/Modal/Setting/SongUnlockManager.vue");
-  window.$modal.create({
-    preset: "card",
-    transformOrigin: "center",
-    autoFocus: false,
-    style: { width: "500px" },
-    title: "音源管理",
-    content: () => {
-      return h(SongUnlockManager);
     },
   });
 };

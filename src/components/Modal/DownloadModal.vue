@@ -37,9 +37,9 @@
             注意：如果歌曲没有对应的音质，将自动下载最高可用音质
           </n-text>
         </n-collapse-item>
-        <n-collapse-item v-if="isElectron" title="下载路径" name="path">
+        <n-collapse-item v-if="isElectron || isNativeAndroid" title="下载路径" name="path">
           <n-input-group>
-            <n-input :value="downloadPath || '未配置下载目录'" disabled>
+            <n-input :value="displayDownloadPath" disabled>
               <template #prefix>
                 <SvgIcon name="Folder" />
               </template>
@@ -75,12 +75,16 @@ import { useSettingStore } from "@/stores";
 import { songLevelData, getSongLevelsData, AI_AUDIO_LEVELS } from "@/utils/meta";
 import { formatFileSize } from "@/utils/helper";
 import { openSetting } from "@/utils/modal";
-import { isElectron } from "@/utils/env";
+import { isElectron, isNativeAndroid } from "@/utils/env";
 import { songDetail } from "@/api/song";
 import { formatSongsList } from "@/utils/format";
 import { pick } from "lodash-es";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
 import { isLogin } from "@/utils/auth";
+import {
+  ANDROID_DEFAULT_DOWNLOAD_DIRECTORY,
+  sPlayerDownloadPlugin,
+} from "@/platform/android/downloadPlugin";
 
 const props = defineProps<{
   songs?: SongType[];
@@ -107,6 +111,11 @@ const downloadNotice = computed(() =>
 
 const selectedQuality = ref<SongLevelType>(props.quality || settingStore.downloadSongLevel || "h");
 const downloadPath = computed(() => settingStore.downloadPath);
+const displayDownloadPath = computed(() =>
+  isNativeAndroid
+    ? downloadPath.value || ANDROID_DEFAULT_DOWNLOAD_DIRECTORY
+    : downloadPath.value || "未配置下载目录",
+);
 
 // 是否可以下载（需要配置下载目录）
 const canDownload = computed(() => {
@@ -177,9 +186,17 @@ const cancel = () => {
 };
 
 // 初始化
-onMounted(() => {
+onMounted(async () => {
+  if (isNativeAndroid) {
+    try {
+      const directory = await sPlayerDownloadPlugin.getDownloadDirectory();
+      settingStore.downloadPath = directory.displayName;
+    } catch (error) {
+      console.error("读取 Android 下载目录失败:", error);
+    }
+  }
   if (props.songId) {
-    getSongDetail();
+    await getSongDetail();
   }
 });
 </script>

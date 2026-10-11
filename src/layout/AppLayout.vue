@@ -88,6 +88,7 @@
           :content-style="{
             display: 'grid',
             gridTemplateRows: '1fr',
+            minWidth: '0',
             minHeight: '100%',
             padding: isMobile ? '0 16px' : '0 24px',
           }"
@@ -233,6 +234,9 @@ onMounted(() => {
     transition: bottom 0.3s;
     .router-view {
       position: relative;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
       height: 100%;
       &.n-result {
         display: flex;
@@ -243,7 +247,7 @@ onMounted(() => {
   }
   &.show-player {
     #main-content {
-      bottom: 80px;
+      bottom: calc(80px + var(--safe-area-inset-bottom));
     }
   }
   &.show-full-player {

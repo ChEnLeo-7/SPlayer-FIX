@@ -10,13 +10,14 @@ import {
   useStatusStore,
 } from "@/stores";
 import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
-import { isElectron, isMac } from "@/utils/env";
+import { isElectron, isMac, isNativeAndroid } from "@/utils/env";
 import { printVersion } from "@/utils/log";
+import { syncServerLocalFavorites } from "@/utils/localFavorites";
 import { openUserAgreement } from "@/utils/modal";
 import { exportPreferencesSnapshot } from "@/utils/accountPreferences";
 import { useEventListener } from "@vueuse/core";
 import { debounce } from "lodash-es";
-import { onMounted, watch } from "vue";
+import { onBeforeUnmount, onMounted, watch } from "vue";
 
 /** 最终聚焦主窗口的延迟时间（毫秒） */
 const FINAL_FOCUS_DELAY_MS = 500;
@@ -35,6 +36,7 @@ export const useInit = () => {
 
   const player = usePlayerController();
   const downloadManager = useDownloadManager();
+  let stopAccountWatcher: (() => void) | undefined;
 
   // 事件监听
   initEventListener();
@@ -42,6 +44,7 @@ export const useInit = () => {
   onMounted(async () => {
     // 检查并执行设置迁移
     settingStore.checkAndMigrate();
+    shortcutStore.migrateDefaults();
     // 打印版本信息
     printVersion();
     // 用户协议
@@ -49,11 +52,12 @@ export const useInit = () => {
     // 加载数据
     await dataStore.loadData();
     await localStore.readLocalPlaylists();
+    await syncServerLocalFavorites();
     await accountStore.restoreSession();
     if (accountStore.status === "locked") {
       window.$message.warning("SPlayer 账户已锁定，请输入密码解锁");
     }
-    watch(
+    stopAccountWatcher = watch(
       () => [
         dataStore.userLikeData,
         dataStore.likeSongsList,
@@ -65,10 +69,11 @@ export const useInit = () => {
         exportPreferencesSnapshot(settingStore.$state, statusStore.$state, shortcutStore.$state),
       ],
       () => accountStore.scheduleSync(),
-      { deep: true },
+      { deep: true, flush: "post" },
     );
     // 初始化 MediaSession
     mediaSessionManager.init();
+    if (isNativeAndroid) downloadManager.init();
     // 初始化播放器
     player.playSong({
       autoPlay: settingStore.autoPlay,
@@ -131,6 +136,11 @@ export const useInit = () => {
         }, FINAL_FOCUS_DELAY_MS);
       }
     }
+  });
+
+  onBeforeUnmount(() => {
+    stopAccountWatcher?.();
+    accountStore.disposeSyncLifecycle();
   });
 };
 

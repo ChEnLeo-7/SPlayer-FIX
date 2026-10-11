@@ -1,16 +1,19 @@
 <template>
   <n-slider
-    v-model:value="sliderProgress"
+    :value="sliderProgress"
     :key="musicStore.playSong?.id"
     :step="0.01"
     :min="0"
-    :max="statusStore.duration"
+    :max="sliderDuration"
+    :disabled="sliderDuration <= 0"
     :keyboard="false"
     :format-tooltip="formatTooltip"
     :tooltip="settingStore.progressTooltipShow && showTooltip"
     :class="['player-slider', { drag: isDragging }]"
+    @update:value="updateSliderProgress"
     @dragstart="startDrag"
     @dragend="endDrag"
+    @mousedown.stop
   />
 </template>
 
@@ -36,20 +39,15 @@ const isDragging = ref(false);
 // const showSliderTooltip = ref(false);
 
 // 实时进度
-const sliderProgress = computed({
-  // 获取进度
-  get: () => (isDragging.value ? dragValue.value : statusStore.currentTime),
-  // 设置进度
-  set: (value) => {
-    // 若为拖动中
-    if (isDragging.value) {
-      dragValue.value = value;
-      return;
-    }
-    // 结束或者为点击
-    useThrottleFn((value: number) => setSeek(value), 30);
-  },
-});
+const sliderDuration = computed(() => statusStore.duration || musicStore.playSong.duration || 0);
+const sliderProgress = computed(() =>
+  isDragging.value ? dragValue.value : statusStore.currentTime,
+);
+
+const updateSliderProgress = (value: number) => {
+  dragValue.value = value;
+  if (!isDragging.value) setSeek(value);
+};
 
 // 开始拖拽
 const startDrag = () => {
@@ -60,9 +58,9 @@ const startDrag = () => {
 
 // 结束拖拽
 const endDrag = () => {
+  const target = dragValue.value;
   isDragging.value = false;
-  // 直接更改进度
-  setSeek(dragValue.value);
+  setSeek(target);
 };
 
 /**

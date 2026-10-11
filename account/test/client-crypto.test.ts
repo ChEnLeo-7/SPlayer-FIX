@@ -6,10 +6,12 @@ import {
   createEncryptedVault,
   deriveAuthenticationSecret,
   deriveRecoveryProof,
+  deserializeAccountCryptoKey,
   decryptVault,
   encryptVault,
   protectRecoveryKey,
   rewrapVaultKeyWithPassword,
+  serializeAccountCryptoKey,
   unlockVaultWithPassword,
   unlockVaultWithRecoveryKey,
   unprotectRecoveryKey,
@@ -69,6 +71,10 @@ test("客户端保险库加密、恢复和密码重包装", async () => {
 
   const passwordKey = await unlockVaultWithPassword("initial-password", created.encryption);
   assert.deepEqual(await decryptVault(created.vault, passwordKey), snapshot);
+  const restoredDeviceKey = await deserializeAccountCryptoKey(
+    await serializeAccountCryptoKey(passwordKey),
+  );
+  assert.deepEqual(await decryptVault(created.vault, restoredDeviceKey), snapshot);
   await assert.rejects(() => unlockVaultWithPassword("wrong-password", created.encryption));
 
   const recoveryKey = await unlockVaultWithRecoveryKey(created.recoveryKey, created.encryption);

@@ -24,6 +24,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import java.util.ArrayDeque;
+import java.util.Iterator;
 import java.util.concurrent.Executor;
 
 @CapacitorPlugin(name = "SPlayerMedia")
@@ -34,6 +36,7 @@ public final class SPlayerMediaPlugin extends Plugin {
     private MediaController controller;
     private boolean wasPlaying;
     private boolean navigationReceiverRegistered;
+    private final ArrayDeque<PendingSeek> pendingSeeks = new ArrayDeque<>();
 
     private final BroadcastReceiver navigationReceiver = new BroadcastReceiver() {
         @Override
@@ -75,6 +78,28 @@ public final class SPlayerMediaPlugin extends Plugin {
             data.put("message", error.getMessage());
             notifyListeners("playbackEvent", data);
         }
+
+        @Override
+        public void onPositionDiscontinuity(
+            @NonNull Player.PositionInfo oldPosition,
+            @NonNull Player.PositionInfo newPosition,
+            int reason
+        ) {
+            if (
+                (reason != Player.DISCONTINUITY_REASON_SEEK && reason != Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT) ||
+                pendingSeeks.isEmpty()
+            ) return;
+            PendingSeek matched = findClosestPendingSeek(newPosition.positionMs);
+            while (!pendingSeeks.isEmpty()) {
+                PendingSeek removed = pendingSeeks.removeFirst();
+                if (removed == matched) break;
+            }
+            JSObject data = createState("seeked");
+            data.put("positionMs", Math.max(0L, newPosition.positionMs));
+            data.put("seekId", matched.id);
+            data.put("requestedPositionMs", matched.positionMs);
+            notifyListeners("playbackEvent", data);
+        }
     };
 
     private final Runnable progressRunnable = new Runnable() {
@@ -113,7 +138,7 @@ public final class SPlayerMediaPlugin extends Plugin {
         controllerFuture = new MediaController.Builder(getContext(), token)
             .setApplicationLooper(Looper.getMainLooper())
             .buildAsync();
-        Executor executor = getContext().getMainExecutor();
+        Executor executor = ContextCompat.getMainExecutor(getContext());
         Futures.addCallback(
             controllerFuture,
             new FutureCallback<MediaController>() {
@@ -170,14 +195,14 @@ public final class SPlayerMediaPlugin extends Plugin {
             JSObject item = call.getObject("item");
             if (item == null) throw new IllegalArgumentException("缺少媒体信息");
             String url = item.getString("url");
-            if (url == null || url.isBlank()) throw new IllegalArgumentException("播放地址为空");
+            if (url == null || url.trim().isEmpty()) throw new IllegalArgumentException("播放地址为空");
             String id = item.getString("id", url);
             MediaMetadata.Builder metadata = new MediaMetadata.Builder()
                 .setTitle(item.getString("title", "未知歌曲"))
                 .setArtist(item.getString("artist", "未知歌手"))
                 .setAlbumTitle(item.getString("album", "未知专辑"));
             String artworkUrl = item.getString("artworkUrl");
-            if (artworkUrl != null && !artworkUrl.isBlank()) {
+            if (artworkUrl != null && !artworkUrl.trim().isEmpty()) {
                 metadata.setArtworkUri(Uri.parse(artworkUrl));
             }
             MediaItem mediaItem = new MediaItem.Builder()
@@ -186,8 +211,9 @@ public final class SPlayerMediaPlugin extends Plugin {
                 .setMediaMetadata(metadata.build())
                 .build();
             boolean autoPlay = call.getBoolean("autoPlay", true);
-            long positionMs = Math.max(0L, call.getLong("positionMs", 0L));
+            long positionMs = Math.max(0L, Math.round(call.getDouble("positionMs", 0.0)));
             emitEvent("loadstart");
+            pendingSeeks.clear();
             controller.setMediaItem(mediaItem);
             controller.prepare();
             if (positionMs > 0) controller.seekTo(positionMs);
@@ -208,6 +234,7 @@ public final class SPlayerMediaPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         runWithController(call, () -> {
+            pendingSeeks.clear();
             controller.stop();
             controller.clearMediaItems();
             emitEvent("emptied");
@@ -217,9 +244,26 @@ public final class SPlayerMediaPlugin extends Plugin {
     @PluginMethod
     public void seekTo(PluginCall call) {
         runWithController(call, () -> {
-            long positionMs = Math.max(0L, call.getLong("positionMs", 0L));
+            if (!controller.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+                throw new IllegalStateException("当前音源不支持跳转播放进度");
+            }
+            long positionMs = Math.max(0L, Math.round(call.getDouble("positionMs", 0.0)));
+            long seekId = Math.max(0L, Math.round(call.getDouble("seekId", 0.0)));
+            pendingSeeks.addLast(new PendingSeek(seekId, positionMs));
+            JSObject data = createState("seeking");
+            data.put("seekId", seekId);
+            data.put("requestedPositionMs", positionMs);
+            notifyListeners("playbackEvent", data);
             controller.seekTo(positionMs);
-            emitState();
+        });
+    }
+
+    @PluginMethod
+    public void clearPendingSeek(PluginCall call) {
+        long seekId = Math.max(0L, Math.round(call.getDouble("seekId", 0.0)));
+        progressHandler.post(() -> {
+            pendingSeeks.removeIf(seek -> seek.id <= seekId);
+            call.resolve();
         });
     }
 
@@ -273,6 +317,21 @@ public final class SPlayerMediaPlugin extends Plugin {
         if (controller != null) notifyListeners("playbackEvent", createState("timeupdate"));
     }
 
+    private PendingSeek findClosestPendingSeek(long positionMs) {
+        PendingSeek closest = pendingSeeks.getFirst();
+        long closestDistance = Math.abs(closest.positionMs - positionMs);
+        Iterator<PendingSeek> iterator = pendingSeeks.iterator();
+        while (iterator.hasNext()) {
+            PendingSeek candidate = iterator.next();
+            long distance = Math.abs(candidate.positionMs - positionMs);
+            if (distance < closestDistance) {
+                closest = candidate;
+                closestDistance = distance;
+            }
+        }
+        return closest;
+    }
+
     @Override
     protected void handleOnDestroy() {
         progressHandler.removeCallbacks(progressRunnable);
@@ -289,5 +348,16 @@ public final class SPlayerMediaPlugin extends Plugin {
             controllerFuture = null;
         }
         super.handleOnDestroy();
+    }
+
+    private static final class PendingSeek {
+
+        final long id;
+        final long positionMs;
+
+        PendingSeek(long id, long positionMs) {
+            this.id = id;
+            this.positionMs = positionMs;
+        }
     }
 }

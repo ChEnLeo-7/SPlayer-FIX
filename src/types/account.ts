@@ -1,7 +1,7 @@
 import type { CoverType, LocalPlaylistType, SongType, UserLikeDataType } from "@/types/main";
 
 export type SPlayerAccountStatus = "guest" | "locked" | "authenticated";
-export type SPlayerSyncStatus = "idle" | "syncing" | "synced" | "conflict" | "error";
+export type SPlayerSyncStatus = "idle" | "pending" | "syncing" | "synced" | "conflict" | "error";
 
 export interface SPlayerUser {
   id: number | string;
@@ -65,6 +65,7 @@ export interface SPlayerAuthResponse {
   encryption: SPlayerEncryption;
   vault: EncryptedVault;
   revision: number;
+  sync?: SPlayerSyncSummary;
 }
 
 export interface SPlayerSessionResponse {
@@ -72,6 +73,7 @@ export interface SPlayerSessionResponse {
   encryption?: SPlayerEncryption;
   vault?: EncryptedVault;
   revision?: number;
+  sync?: SPlayerSyncSummary;
 }
 
 export interface SPlayerRegisterRequest {
@@ -102,6 +104,123 @@ export interface SPlayerVaultUpdateRequest {
 export interface SPlayerVaultResponse {
   vault: EncryptedVault;
   revision: number;
+}
+
+export type SPlayerSyncMode = "vault" | "operations";
+
+export interface SPlayerOperationMetadata {
+  operationId: string;
+  deviceId: string;
+  deviceSeq: number;
+  baseCursor: number;
+}
+
+export interface EncryptedSPlayerOperation extends SPlayerOperationMetadata, EncryptedValue {}
+
+export interface SPlayerCursorOperation extends EncryptedSPlayerOperation {
+  cursor: number;
+}
+
+export type SPlayerMutationCollection =
+  | "favorite-song"
+  | "favorite-playlist"
+  | "favorite-album"
+  | "favorite-artist"
+  | "favorite-mv"
+  | "favorite-podcast"
+  | "favorite-song-list"
+  | "private-playlist"
+  | "private-playlist-member"
+  | "playlist-song"
+  | "history"
+  | "setting"
+  | "status"
+  | "shortcut"
+  | "queue";
+
+export interface SPlayerAccountMutation {
+  collection: SPlayerMutationCollection;
+  entityId: string;
+  action: "put" | "delete";
+  value?: unknown;
+}
+
+export interface SPlayerOperationPayload {
+  schemaVersion: 1;
+  mutations: SPlayerAccountMutation[];
+}
+
+export interface SPlayerEntityVersion extends SPlayerOperationMetadata {
+  cursor?: number;
+  deleted: boolean;
+  value?: unknown;
+}
+
+export type SPlayerVersionTable = Record<string, SPlayerEntityVersion>;
+
+export interface SPlayerLocalSyncState {
+  schemaVersion: 1;
+  deviceSeq: number;
+  pullCursor: number;
+  outbox: EncryptedSPlayerOperation[];
+  versions: SPlayerVersionTable;
+}
+
+export interface SPlayerSyncSummary {
+  protocolVersion: number;
+  mode: SPlayerSyncMode;
+  headCursor: number;
+}
+
+export interface SPlayerSyncLimits {
+  maxOperations: number;
+  maxBytes: number;
+  maxOperationBytes: number;
+  maxBatchOperations: number;
+  maxPullOperations: number;
+}
+
+export interface SPlayerSyncInfo extends SPlayerSyncSummary {
+  operationCount: number;
+  operationBytes: number;
+  limits: SPlayerSyncLimits;
+}
+
+export interface SPlayerSyncInfoResponse {
+  sync: SPlayerSyncInfo;
+}
+
+export interface SPlayerSyncMigrateRequest {
+  revision: number;
+}
+
+export type SPlayerSyncMigrateResponse = SPlayerSyncInfoResponse;
+
+export interface SPlayerOperationsAppendRequest {
+  operations: EncryptedSPlayerOperation[];
+}
+
+export interface SPlayerAcceptedOperation {
+  operationId: string;
+  cursor: number;
+  duplicate: boolean;
+}
+
+export interface SPlayerOperationsAppendResponse {
+  operations: SPlayerAcceptedOperation[];
+  headCursor: number;
+}
+
+export interface SPlayerOperationsPullRequest {
+  after: number;
+  limit?: number;
+}
+
+export interface SPlayerOperationsPullResponse {
+  operations: SPlayerCursorOperation[];
+  headCursor: number;
+  nextCursor: number;
+  hasMore: boolean;
 }
 
 export interface SPlayerApiErrorResponse {

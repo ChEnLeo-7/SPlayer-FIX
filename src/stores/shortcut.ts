@@ -34,7 +34,7 @@ export const createDefaultShortcutState = (): ShortcutStore => ({
     // 播放或暂停
     playOrPause: {
       name: "播放 / 暂停",
-      shortcut: "CmdOrCtrl+Space",
+      shortcut: "Space",
       globalShortcut: "CmdOrCtrl+Shift+Space",
     },
     // 上一曲 / 下一曲
@@ -101,6 +101,11 @@ export const useShortcutStore = defineStore("shortcut", {
   state: createDefaultShortcutState,
   getters: {},
   actions: {
+    migrateDefaults() {
+      if (this.shortcutList.playOrPause.shortcut === "CmdOrCtrl+Space") {
+        this.shortcutList.playOrPause.shortcut = "Space";
+      }
+    },
     // 注册全部全局快捷键
     async registerAllShortcuts() {
       if (!this.globalOpen) return;

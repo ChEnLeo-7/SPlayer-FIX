@@ -18,7 +18,7 @@
         class="extra-info"
         align="center"
       >
-        <n-popover :show-arrow="false" placement="right" raw>
+        <n-popover :show-arrow="false" :placement="isTablet ? 'top' : 'right'" raw>
           <template #trigger>
             <SvgIcon
               :depth="3"
@@ -67,18 +67,7 @@
         </n-popselect>
         <span v-else class="meta-item">{{ lyricMode }}</span>
         <!-- 音源状态 -->
-        <n-popselect
-          v-if="audioSourceOptions.length > 1 && canSwitchSource"
-          trigger="click"
-          :value="statusStore.audioSource"
-          :options="audioSourceOptions"
-          @update:value="(val) => player.switchAudioSource(val)"
-        >
-          <span class="meta-item clickable">
-            {{ audioSourceText }}
-          </span>
-        </n-popselect>
-        <span v-else class="meta-item">
+        <span class="meta-item">
           {{ audioSourceText }}
         </span>
       </n-flex>
@@ -147,10 +136,9 @@ import type { RouteLocationRaw } from "vue-router";
 import { useMusicStore, useStatusStore, useSettingStore } from "@/stores";
 import { debounce, isObject } from "lodash-es";
 import { removeBrackets } from "@/utils/format";
-import { SongUnlockServer } from "@/core/player/SongManager";
 import { useLyricManager } from "@/core/player/LyricManager";
-import { usePlayerController } from "@/core/player/PlayerController";
 import { radioProgramDetail } from "@/api/radio";
+import { useMobile } from "@/composables/useMobile";
 const props = defineProps<{
   /** 数据居中 */
   center?: boolean;
@@ -163,7 +151,7 @@ const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const lyricManager = useLyricManager();
-const player = usePlayerController();
+const { isTablet } = useMobile();
 
 // 当前歌词模式
 const lyricMode = computed(() => {
@@ -198,32 +186,11 @@ const leftMargin = computed(() => {
   return settingStore.useAMLyrics ? `${offset + 40}px` : `${offset + 10}px`;
 });
 
-/** 音频源选项 */
-const audioSourceOptions = computed(() => {
-  const options = [{ label: "自动", value: "auto" }];
-  settingStore.songUnlockServer.forEach((server) => {
-    if (server.enabled) {
-      options.push({
-        label: sourceMap[server.key] || server.key.toUpperCase(),
-        value: server.key,
-      });
-    }
-  });
-  return options;
-});
-
-/** 是否可以切换音频源 */
-const canSwitchSource = computed(() => {
-  const song = musicStore.playSong;
-  return !song.path && song.type === "song" && !song.pc;
-});
-
 /** 音频源名称映射 */
 const sourceMap: Record<string, string> = {
   official: "Official",
-  [SongUnlockServer.NETEASE]: "Netease",
-  [SongUnlockServer.KUWO]: "Kuwo",
-  [SongUnlockServer.BODIAN]: "Bodian",
+  unblock: "Unblock",
+  match: "Match",
   local: "Local",
   streaming: "Streaming",
 };
@@ -236,7 +203,7 @@ const audioSourceText = computed(() => {
   if (statusStore.audioSource) {
     return sourceMap[statusStore.audioSource] || statusStore.audioSource.toUpperCase();
   }
-  return "Netease";
+  return "Official";
 });
 
 const jumpPage = debounce(
@@ -435,11 +402,15 @@ const jumpToRadio = debounce(
   }
 }
 .player-tip {
-  max-width: 240px;
+  width: fit-content;
+  max-width: min(240px, calc(100vw - 32px));
+  box-sizing: border-box;
   padding: 12px 20px;
   border-radius: 12px;
   color: rgb(var(--main-cover-color));
   background-color: rgba(var(--main-cover-color), 0.18);
   backdrop-filter: blur(10px);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>

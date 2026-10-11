@@ -8,10 +8,11 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - ./data:/data/splayer
+      - ./releases:/usr/share/nginx/html/downloads:ro
     ports:
       - 25884:25884
       - 16300:3000
-      - 16380:80
+      - 16380:16380
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:25884/"]
       interval: 30s
@@ -21,27 +22,22 @@ services:
     restart: unless-stopped
     environment:
       # 所有变量都不是必填项
-      # 网易云服务端 IP, 可在宿主机通过 ping music.163.com 获得
-      #- NETEASE_SERVER_IP=220.197.30.65
-      # UnblockNeteaseMusic 使用的音源, 支持列表见 https://github.com/UnblockNeteaseMusic/server?tab=readme-ov-file#%E9%9F%B3%E6%BA%90%E6%B8%85%E5%8D%95
-      - UNBLOCK_SOURCES=pyncmd bodian kuwo
-      # 可添加 UnblockNeteaseMusic 支持的任何环境变量, 支持列表见 https://github.com/UnblockNeteaseMusic/server?tab=readme-ov-file#%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F
-      - ENABLE_FLAC=true
-      - ENABLE_HTTPDNS=false
-      - BLOCK_ADS=true
-      - DISABLE_UPGRADE_CHECK=true
-      - DEVELOPMENT=false
-      - FOLLOW_SOURCE_ORDER=true
-      - JSON_LOG=false
-      - NO_CACHE=false
-      - SELECT_MAX_BR=true
-      - LOG_LEVEL=debug
-      - SEARCH_ALBUM=true
       # 允许通过局域网 HTTP 使用 SPlayer 账户；公网部署建议改为 false
       - SPLAYER_ALLOW_INSECURE_HTTP=true
+      # 为 Music Together 提供严格限域的 UNM HTTP 代理
+      - SPLAYER_MUSIC_TOGETHER_UNM_ENABLED=true
+      - SPLAYER_MUSIC_TOGETHER_UNM_SOURCES=pyncmd bodian kuwo
+      # 如需歌曲解析专用 Cookie，按 docs/guide.md 创建 Secret 后取消以下注释
+      # - SPLAYER_NETEASE_PLAYBACK_COOKIE_FILE=/run/secrets/netease_playback_cookie
+    # secrets:
+    #   - netease_playback_cookie
     networks:
       - shared-net
 
 networks:
   shared-net:
     external: true
+
+# secrets:
+#   netease_playback_cookie:
+#     file: ./secrets/netease-playback-cookie

@@ -2,9 +2,16 @@ import type {
   SPlayerApiErrorResponse,
   SPlayerAuthResponse,
   SPlayerLoginRequest,
+  SPlayerOperationsAppendRequest,
+  SPlayerOperationsAppendResponse,
+  SPlayerOperationsPullRequest,
+  SPlayerOperationsPullResponse,
   SPlayerPasswordRequest,
   SPlayerRegisterRequest,
   SPlayerSessionResponse,
+  SPlayerSyncInfoResponse,
+  SPlayerSyncMigrateRequest,
+  SPlayerSyncMigrateResponse,
   SPlayerVaultResponse,
   SPlayerVaultUpdateRequest,
 } from "@/types/account";
@@ -41,3 +48,21 @@ export const getSPlayerVault = () =>
 
 export const updateSPlayerVault = (data: SPlayerVaultUpdateRequest) =>
   accountRequest.put<SPlayerVaultResponse>("/vault", data).then((response) => response.data);
+
+export const getSPlayerSyncInfo = () =>
+  accountRequest.get<SPlayerSyncInfoResponse>("/sync/info").then((response) => response.data);
+
+export const migrateSPlayerSync = (data: SPlayerSyncMigrateRequest) =>
+  accountRequest
+    .post<SPlayerSyncMigrateResponse>("/sync/migrate", data)
+    .then((response) => response.data);
+
+export const appendSPlayerOperations = (data: SPlayerOperationsAppendRequest) =>
+  accountRequest
+    .post<SPlayerOperationsAppendResponse>("/sync/operations", data)
+    .then((response) => response.data);
+
+export const pullSPlayerOperations = (params: SPlayerOperationsPullRequest) =>
+  accountRequest
+    .get<SPlayerOperationsPullResponse>("/sync/operations", { params })
+    .then((response) => response.data);

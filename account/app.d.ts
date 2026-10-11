@@ -11,6 +11,11 @@ export interface AccountAppOptions {
   adminToken?: string;
   allowInsecureHttp?: boolean;
   maxAccounts?: number;
+  maxSyncOperations?: number;
+  maxSyncBytes?: number;
+  maxOperationBytes?: number;
+  maxOperationsPerBatch?: number;
+  maxPullLimit?: number;
 }
 
 export function buildAccountApp(options?: AccountAppOptions): Promise<FastifyInstance>;

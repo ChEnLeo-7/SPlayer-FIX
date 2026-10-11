@@ -1,6 +1,9 @@
 import type {
   EncryptedValue,
+  EncryptedSPlayerOperation,
   EncryptedVault,
+  SPlayerOperationMetadata,
+  SPlayerOperationPayload,
   SPlayerEncryption,
   SPlayerVaultSnapshot,
 } from "@/types/account";
@@ -17,6 +20,7 @@ const PASSWORD_WRAP_AAD = new TextEncoder().encode("SPLAYER_PASSWORD_WRAP_V1");
 const RECOVERY_WRAP_AAD = new TextEncoder().encode("SPLAYER_RECOVERY_WRAP_V1");
 const AUTH_DOMAIN = "SPLAYER_AUTH_V1";
 const PENDING_RECOVERY_AAD = new TextEncoder().encode("SPLAYER_PENDING_RECOVERY_V1");
+const OPERATION_AAD_DOMAIN = "SPLAYER_SYNC_OPERATION_V1";
 
 export class VaultUnlockError extends Error {
   constructor(message = "密码错误或保险库数据已损坏") {
@@ -26,6 +30,14 @@ export class VaultUnlockError extends Error {
 }
 
 export type AccountCryptoKey = CryptoKey | Uint8Array<ArrayBuffer>;
+
+/** 将保险库密钥转换为设备安全存储格式 */
+export const serializeAccountCryptoKey = async (key: AccountCryptoKey): Promise<string> =>
+  bytesToBase64Url(await exportAesKey(key));
+
+/** 从设备安全存储恢复保险库密钥 */
+export const deserializeAccountCryptoKey = async (value: string): Promise<AccountCryptoKey> =>
+  importAesKey(base64UrlToBytes(value), true);
 
 const hasWebCrypto = () => Boolean(globalThis.crypto?.subtle);
 
@@ -219,6 +231,60 @@ const decryptBytes = async (
     base64UrlToBytes(encrypted.ciphertext),
   );
   return new Uint8Array(plaintext);
+};
+
+const getOperationAdditionalData = (
+  accountId: number | string,
+  metadata: SPlayerOperationMetadata,
+) =>
+  new TextEncoder().encode(
+    JSON.stringify([
+      OPERATION_AAD_DOMAIN,
+      String(accountId),
+      metadata.operationId,
+      metadata.deviceId,
+      metadata.deviceSeq,
+      metadata.baseCursor,
+    ]),
+  );
+
+/** 使用账户和操作元数据加密增量操作 */
+export const encryptSPlayerOperation = async (
+  accountId: number | string,
+  payload: SPlayerOperationPayload,
+  metadata: SPlayerOperationMetadata,
+  vaultKey: AccountCryptoKey,
+): Promise<EncryptedSPlayerOperation> => ({
+  ...metadata,
+  ...(await encryptBytes(
+    new TextEncoder().encode(JSON.stringify(payload)),
+    vaultKey,
+    getOperationAdditionalData(accountId, metadata),
+  )),
+});
+
+/** 解密并校验增量操作 */
+export const decryptSPlayerOperation = async (
+  accountId: number | string,
+  operation: EncryptedSPlayerOperation,
+  vaultKey: AccountCryptoKey,
+): Promise<SPlayerOperationPayload> => {
+  const metadata: SPlayerOperationMetadata = {
+    operationId: operation.operationId,
+    deviceId: operation.deviceId,
+    deviceSeq: operation.deviceSeq,
+    baseCursor: operation.baseCursor,
+  };
+  const plaintext = await decryptBytes(
+    operation,
+    vaultKey,
+    getOperationAdditionalData(accountId, metadata),
+  );
+  const payload = JSON.parse(new TextDecoder().decode(plaintext)) as SPlayerOperationPayload;
+  if (payload.schemaVersion !== 1 || !Array.isArray(payload.mutations)) {
+    throw new Error("不支持的增量操作格式");
+  }
+  return payload;
 };
 
 export const encryptVault = async (

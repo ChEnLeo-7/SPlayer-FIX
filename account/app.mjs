@@ -20,6 +20,11 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const REGISTRATION_WINDOW_MS = 60 * 60 * 1000;
 const REGISTRATION_MAX_ATTEMPTS = 3;
 const MAX_STRING_LENGTH = 4 * 1024 * 1024;
+const MAX_SYNC_OPERATIONS = 50_000;
+const MAX_SYNC_BYTES = 100 * 1024 * 1024;
+const MAX_OPERATION_BYTES = 256 * 1024;
+const MAX_OPERATIONS_PER_BATCH = 14;
+const MAX_PULL_LIMIT = 500;
 const AUTH_KDF_ITERATIONS = 600_000;
 const AUTH_DOMAIN = "SPLAYER_AUTH_V1";
 
@@ -55,6 +60,56 @@ function requireString(value, name, maximumLength = MAX_STRING_LENGTH) {
     throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
   }
   return value;
+}
+
+function requireNonNegativeInteger(value, name) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  return value;
+}
+
+function requirePositiveInteger(value, name) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  return value;
+}
+
+function requireQueryInteger(value, name, defaultValue, minimum, maximum) {
+  if (value === undefined) return defaultValue;
+  if (typeof value !== "string" || !/^(0|[1-9]\d*)$/u.test(value)) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  return parsed;
+}
+
+function requireUuid(value, name) {
+  const uuid = requireString(value, name, 36);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(uuid)) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  return uuid.toLowerCase();
+}
+
+function requireBase64Url(value, name, maximumBytes, exactBytes) {
+  const encoded = requireString(value, name, Math.ceil((maximumBytes * 4) / 3));
+  if (!/^[A-Za-z0-9_-]+$/u.test(encoded)) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  const decoded = Buffer.from(encoded, "base64url");
+  if (
+    decoded.toString("base64url") !== encoded ||
+    decoded.length > maximumBytes ||
+    (exactBytes !== undefined && decoded.length !== exactBytes)
+  ) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  return { encoded, bytes: decoded.length };
 }
 
 function normalizeUsername(username) {
@@ -116,6 +171,44 @@ function requireVault(value) {
   return value;
 }
 
+function requireOperation(value, index, maximumBytes) {
+  const name = `operations[${index}]`;
+  const operation = requireExactKeys(value, name, [
+    "operationId",
+    "deviceId",
+    "deviceSeq",
+    "baseCursor",
+    "nonce",
+    "ciphertext",
+  ]);
+  const operationId = requireUuid(operation.operationId, `${name}.operationId`);
+  const deviceId = requireUuid(operation.deviceId, `${name}.deviceId`);
+  const deviceSeq = requirePositiveInteger(operation.deviceSeq, `${name}.deviceSeq`);
+  const baseCursor = requireNonNegativeInteger(operation.baseCursor, `${name}.baseCursor`);
+  const nonce = requireBase64Url(operation.nonce, `${name}.nonce`, 12, 12);
+  const ciphertext = requireBase64Url(operation.ciphertext, `${name}.ciphertext`, maximumBytes);
+  return {
+    operationId,
+    deviceId,
+    deviceSeq,
+    baseCursor,
+    nonce: nonce.encoded,
+    ciphertext: ciphertext.encoded,
+    byteSize: nonce.bytes + ciphertext.bytes,
+  };
+}
+
+function isSameOperation(stored, operation) {
+  return (
+    stored.operation_id === operation.operationId &&
+    stored.device_id === operation.deviceId &&
+    stored.device_seq === operation.deviceSeq &&
+    stored.base_cursor === operation.baseCursor &&
+    stored.nonce === operation.nonce &&
+    stored.ciphertext === operation.ciphertext
+  );
+}
+
 function requirePasswordEncryption(value) {
   const encryption = requireExactKeys(value, "passwordEncryption", [
     "kdfSalt",
@@ -156,6 +249,17 @@ function publicUser(user) {
   };
 }
 
+function syncResponse(database, userId) {
+  const state = database
+    .prepare("SELECT sync_version, head_cursor FROM account_sync_state WHERE user_id = ?")
+    .get(userId);
+  return {
+    protocolVersion: state.sync_version,
+    mode: state.sync_version === 2 ? "operations" : "vault",
+    headCursor: state.head_cursor,
+  };
+}
+
 function accountResponse(database, user) {
   const encryption = database
     .prepare("SELECT envelope_json FROM encryptions WHERE user_id = ?")
@@ -169,6 +273,7 @@ function accountResponse(database, user) {
     encryption: parseJson(encryption.envelope_json),
     vault: parseJson(vault.vault_json),
     revision: vault.revision,
+    sync: syncResponse(database, user.id),
   };
 }
 
@@ -194,6 +299,17 @@ export async function buildAccountApp(options = {}) {
   const allowInsecureHttp =
     options.allowInsecureHttp ?? process.env.SPLAYER_ALLOW_INSECURE_HTTP !== "false";
   const maxAccounts = options.maxAccounts ?? Number(process.env.SPLAYER_MAX_ACCOUNTS || 1000);
+  const maxSyncOperations =
+    options.maxSyncOperations ??
+    Number(process.env.SPLAYER_MAX_SYNC_OPERATIONS || MAX_SYNC_OPERATIONS);
+  const maxSyncBytes =
+    options.maxSyncBytes ?? Number(process.env.SPLAYER_MAX_SYNC_BYTES || MAX_SYNC_BYTES);
+  const maxOperationBytes =
+    options.maxOperationBytes ??
+    Number(process.env.SPLAYER_MAX_OPERATION_BYTES || MAX_OPERATION_BYTES);
+  const maxOperationsPerBatch = options.maxOperationsPerBatch ?? MAX_OPERATIONS_PER_BATCH;
+  const maxPullLimit = options.maxPullLimit ?? MAX_PULL_LIMIT;
+  const syncClients = new Map();
   const allowedHosts = new Set(
     (options.allowedHosts ?? process.env.SPLAYER_ALLOWED_HOSTS?.split(",") ?? [])
       .map((host) => host.trim().toLowerCase())
@@ -221,6 +337,10 @@ export async function buildAccountApp(options = {}) {
 
   app.addHook("onClose", async () => {
     clearInterval(cleanupTimer);
+    for (const clients of syncClients.values()) {
+      for (const response of clients) response.end();
+    }
+    syncClients.clear();
     database.close();
   });
 
@@ -376,6 +496,119 @@ export async function buildAccountApp(options = {}) {
     loginAttempts.set(key, recentAttempts);
   }
 
+  function requireSyncState(userId, requiredVersion) {
+    const state = database
+      .prepare("SELECT * FROM account_sync_state WHERE user_id = ?")
+      .get(userId);
+    if (!state) throw new ApiError(500, "INTERNAL_ERROR", "账户同步状态缺失");
+    if (requiredVersion && state.sync_version !== requiredVersion) {
+      throw new ApiError(409, "SYNC_MIGRATION_REQUIRED", "账户需要先迁移到增量同步协议");
+    }
+    return state;
+  }
+
+  function syncInfo(userId) {
+    const state = requireSyncState(userId);
+    return {
+      ...syncResponse(database, userId),
+      operationCount: state.operation_count,
+      operationBytes: state.operation_bytes,
+      limits: {
+        maxOperations: maxSyncOperations,
+        maxBytes: maxSyncBytes,
+        maxOperationBytes,
+        maxBatchOperations: maxOperationsPerBatch,
+        maxPullOperations: maxPullLimit,
+      },
+    };
+  }
+
+  function notifySyncClients(userId, cursor) {
+    const event = `id: ${cursor}\nevent: cursor\ndata: ${JSON.stringify({ cursor })}\n\n`;
+    for (const response of syncClients.get(userId) ?? []) response.write(event);
+  }
+
+  const appendOperations = database.transaction((userId, operations) => {
+    const state = requireSyncState(userId, 2);
+    const initialHeadCursor = state.head_cursor;
+    if (operations.some((operation) => operation.baseCursor > initialHeadCursor)) {
+      throw new ApiError(409, "BASE_CURSOR_AHEAD", "操作基线游标超过服务端游标", {
+        headCursor: initialHeadCursor,
+      });
+    }
+
+    let headCursor = initialHeadCursor;
+    let operationCount = state.operation_count;
+    let operationBytes = state.operation_bytes;
+    let appended = 0;
+    const results = [];
+    for (const operation of operations) {
+      const stored = database
+        .prepare("SELECT * FROM vault_operations WHERE user_id = ? AND operation_id = ?")
+        .get(userId, operation.operationId);
+      if (stored) {
+        if (!isSameOperation(stored, operation)) {
+          throw new ApiError(409, "OPERATION_ID_CONFLICT", "operationId 已用于其他操作");
+        }
+        results.push({
+          operationId: operation.operationId,
+          cursor: stored.cursor,
+          duplicate: true,
+        });
+        continue;
+      }
+
+      if (
+        operationCount + 1 > maxSyncOperations ||
+        operationBytes + operation.byteSize > maxSyncBytes
+      ) {
+        throw new ApiError(507, "SYNC_CAPACITY_REACHED", "账户同步日志已达到容量限制");
+      }
+
+      headCursor += 1;
+      operationCount += 1;
+      operationBytes += operation.byteSize;
+      appended += 1;
+      database
+        .prepare(
+          `INSERT INTO vault_operations
+           (user_id, cursor, operation_id, device_id, device_seq, base_cursor, nonce,
+            ciphertext, byte_size, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          userId,
+          headCursor,
+          operation.operationId,
+          operation.deviceId,
+          operation.deviceSeq,
+          operation.baseCursor,
+          operation.nonce,
+          operation.ciphertext,
+          operation.byteSize,
+          Date.now(),
+        );
+      results.push({ operationId: operation.operationId, cursor: headCursor, duplicate: false });
+    }
+
+    if (appended > 0) {
+      database
+        .prepare(
+          `UPDATE account_sync_state
+           SET head_cursor = ?, operation_count = ?, operation_bytes = ?, updated_at = ?
+           WHERE user_id = ?`,
+        )
+        .run(headCursor, operationCount, operationBytes, Date.now(), userId);
+    }
+    return { results, headCursor, appended };
+  });
+
+  app.get("/api/splayer/health", async () => ({
+    name: "SPlayer",
+    status: "ok",
+    mobileApiVersion: 1,
+  }));
+
   app.post("/api/splayer/register", async (request, reply) => {
     const body = requireObject(request.body, "request");
     const { displayName, normalizedUsername } = normalizeUsername(body.username);
@@ -420,6 +653,9 @@ export async function buildAccountApp(options = {}) {
             "INSERT INTO vaults (user_id, vault_json, revision, updated_at) VALUES (?, ?, 1, ?)",
           )
           .run(user.id, JSON.stringify(vault), now);
+        database
+          .prepare("INSERT INTO account_sync_state (user_id, updated_at) VALUES (?, ?)")
+          .run(user.id, now);
       })();
     } catch (error) {
       if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
@@ -482,8 +718,157 @@ export async function buildAccountApp(options = {}) {
     return { vault: parseJson(vault.vault_json), revision: vault.revision };
   });
 
+  app.get("/api/splayer/sync/info", async (request, reply) => {
+    const user = authenticate(request, reply);
+    return { sync: syncInfo(user.id) };
+  });
+
+  app.post("/api/splayer/sync/migrate", async (request, reply) => {
+    const user = authenticate(request, reply);
+    if (user.must_change_password) {
+      throw new ApiError(403, "PASSWORD_CHANGE_REQUIRED", "必须先使用恢复密钥设置新密码");
+    }
+    const body = requireExactKeys(request.body, "request", ["revision"]);
+    const revision = requirePositiveInteger(body.revision, "revision");
+    database
+      .transaction(() => {
+        const vault = database
+          .prepare("SELECT revision FROM vaults WHERE user_id = ?")
+          .get(user.id);
+        if (vault.revision !== revision) {
+          throw new ApiError(409, "REVISION_CONFLICT", "保险库版本冲突", {
+            revision: vault.revision,
+          });
+        }
+        const state = requireSyncState(user.id);
+        if (state.sync_version === 1) {
+          const now = Date.now();
+          database
+            .prepare(
+              `UPDATE account_sync_state SET sync_version = 2, migrated_at = ?, updated_at = ?
+               WHERE user_id = ?`,
+            )
+            .run(now, now, user.id);
+        }
+      })
+      .immediate();
+    return { sync: syncInfo(user.id) };
+  });
+
+  app.post("/api/splayer/sync/operations", async (request, reply) => {
+    const user = authenticate(request, reply);
+    if (user.must_change_password) {
+      throw new ApiError(403, "PASSWORD_CHANGE_REQUIRED", "必须先使用恢复密钥设置新密码");
+    }
+    const body = requireExactKeys(request.body, "request", ["operations"]);
+    if (
+      !Array.isArray(body.operations) ||
+      body.operations.length === 0 ||
+      body.operations.length > maxOperationsPerBatch
+    ) {
+      throw new ApiError(400, "INVALID_REQUEST", "operations 数量无效");
+    }
+    const operations = body.operations.map((operation, index) =>
+      requireOperation(operation, index, maxOperationBytes),
+    );
+    const result = appendOperations.immediate(user.id, operations);
+    if (result.appended > 0) notifySyncClients(user.id, result.headCursor);
+    return { operations: result.results, headCursor: result.headCursor };
+  });
+
+  app.get("/api/splayer/sync/operations", async (request, reply) => {
+    const user = authenticate(request, reply);
+    requireSyncState(user.id, 2);
+    const query = requireExactKeys(
+      request.query,
+      "query",
+      ["after", "limit"].filter((key) => Object.hasOwn(request.query, key)),
+    );
+    const after = requireQueryInteger(query.after, "after", 0, 0, Number.MAX_SAFE_INTEGER);
+    const limit = requireQueryInteger(query.limit, "limit", 100, 1, maxPullLimit);
+    const state = requireSyncState(user.id, 2);
+    const rows = database
+      .prepare(
+        `SELECT cursor, operation_id, device_id, device_seq, base_cursor, nonce, ciphertext
+         FROM vault_operations WHERE user_id = ? AND cursor > ? ORDER BY cursor LIMIT ?`,
+      )
+      .all(user.id, after, limit + 1);
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop();
+    const operations = rows.map((row) => ({
+      cursor: row.cursor,
+      operationId: row.operation_id,
+      deviceId: row.device_id,
+      deviceSeq: row.device_seq,
+      baseCursor: row.base_cursor,
+      nonce: row.nonce,
+      ciphertext: row.ciphertext,
+    }));
+    return {
+      operations,
+      headCursor: state.head_cursor,
+      nextCursor: operations.at(-1)?.cursor ?? after,
+      hasMore,
+    };
+  });
+
+  app.get("/api/splayer/sync/events", async (request, reply) => {
+    const user = authenticate(request, reply);
+    requireSyncState(user.id, 2);
+    const query = requireExactKeys(request.query, "query", request.query.cursor ? ["cursor"] : []);
+    const lastEventId = request.headers["last-event-id"];
+    if (lastEventId !== undefined && typeof lastEventId !== "string") {
+      throw new ApiError(400, "INVALID_REQUEST", "Last-Event-ID 格式无效");
+    }
+    const cursor = requireQueryInteger(
+      query.cursor ?? lastEventId,
+      "cursor",
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
+    const state = requireSyncState(user.id, 2);
+    if (cursor > state.head_cursor) {
+      throw new ApiError(409, "CURSOR_AHEAD", "订阅游标超过服务端游标", {
+        headCursor: state.head_cursor,
+      });
+    }
+
+    reply.raw.statusCode = 200;
+    reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
+    reply.raw.setHeader("Connection", "keep-alive");
+    reply.raw.setHeader("X-Accel-Buffering", "no");
+    const renewedCookie = reply.getHeader("set-cookie");
+    if (renewedCookie) reply.raw.setHeader("Set-Cookie", renewedCookie);
+    reply.hijack();
+    reply.raw.flushHeaders();
+
+    let clients = syncClients.get(user.id);
+    if (!clients) {
+      clients = new Set();
+      syncClients.set(user.id, clients);
+    }
+    clients.add(reply.raw);
+    reply.raw.write(
+      `retry: 5000\nid: ${state.head_cursor}\nevent: cursor\ndata: ${JSON.stringify({
+        cursor: state.head_cursor,
+      })}\n\n`,
+    );
+    const heartbeat = setInterval(() => reply.raw.write(": keepalive\n\n"), 25_000);
+    heartbeat.unref();
+    request.raw.on("close", () => {
+      clearInterval(heartbeat);
+      clients.delete(reply.raw);
+      if (clients.size === 0) syncClients.delete(user.id);
+    });
+  });
+
   app.put("/api/splayer/vault", async (request, reply) => {
     const user = authenticate(request, reply);
+    if (requireSyncState(user.id).sync_version === 2) {
+      throw new ApiError(409, "CLIENT_UPDATE_REQUIRED", "账户已启用增量同步，请更新客户端后重试");
+    }
     if (user.must_change_password) {
       throw new ApiError(403, "PASSWORD_CHANGE_REQUIRED", "必须先使用恢复密钥设置新密码");
     }

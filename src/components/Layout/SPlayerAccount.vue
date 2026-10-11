@@ -3,6 +3,7 @@
     <n-button
       :class="['splayer-account', `is-${accountStore.syncStatus}`]"
       :title="buttonLabel"
+      :type="accountStore.status === 'authenticated' ? 'success' : 'error'"
       :focusable="false"
       tertiary
     >
@@ -28,7 +29,8 @@ const buttonLabel = computed(() => {
   if (accountStore.status === "guest") return "SPlayer 未登录";
   if (accountStore.status === "locked") return "SPlayer 已锁定";
   if (accountStore.syncStatus === "syncing") return "SPlayer 同步中";
-  if (accountStore.syncStatus === "conflict") return "SPlayer 冲突";
+  if (accountStore.syncStatus === "pending") return "SPlayer 待同步";
+  if (accountStore.syncStatus === "conflict") return "SPlayer 旧草稿待处理";
   if (accountStore.syncStatus === "error") return "SPlayer 同步失败";
   return `SPlayer ${accountStore.user?.username ?? ""}`;
 });
@@ -50,8 +52,9 @@ const options = computed<DropdownOption[]>(() => {
       disabled: true,
     },
     {
-      label: accountStore.syncStatus === "conflict" ? "存在同步冲突" : "立即同步",
+      label: accountStore.syncStatus === "conflict" ? "旧草稿需要处理" : "立即同步",
       key: "sync",
+      disabled: accountStore.syncStatus === "conflict",
       icon: renderIcon("Refresh"),
     },
     ...(accountStore.syncStatus === "conflict"
@@ -93,7 +96,7 @@ const handleSelect = async (key: string) => {
   if (key === "conflict-remote" || key === "conflict-local") {
     const useRemote = key === "conflict-remote";
     window.$dialog.warning({
-      title: "处理同步冲突",
+      title: "处理旧草稿冲突",
       content: useRemote
         ? "将使用云端保险库替换本机账户数据。Guest 数据不受影响。"
         : "将使用本机账户数据覆盖云端保险库，其他设备未同步的修改可能丢失。",
@@ -102,10 +105,10 @@ const handleSelect = async (key: string) => {
       onPositiveClick: async () => {
         try {
           await accountStore.resolveConflict(useRemote ? "remote" : "local");
-          window.$message.success("同步冲突已处理");
+          window.$message.success("旧草稿冲突已处理");
           return true;
         } catch {
-          window.$message.error(accountStore.lastError || "处理同步冲突失败");
+          window.$message.error(accountStore.lastError || "处理旧草稿冲突失败");
           return false;
         }
       },
@@ -146,6 +149,9 @@ const handleSelect = async (key: string) => {
   &.is-conflict,
   &.is-error {
     color: var(--error-color);
+  }
+  &.is-pending {
+    color: var(--warning-color);
   }
 }
 </style>

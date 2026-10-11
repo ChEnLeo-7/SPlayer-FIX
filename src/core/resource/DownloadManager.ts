@@ -1,18 +1,30 @@
 import type { SongType, SongLevelType } from "@/types/main";
 import { useDataStore, useSettingStore } from "@/stores";
-import { isElectron } from "@/utils/env";
+import { isElectron, isNativeAndroid } from "@/utils/env";
 import { saveAs } from "file-saver";
 import { cloneDeep } from "lodash-es";
-import { songDownloadUrl, songLyric, songUrl, unlockSongUrl, songLyricTTML } from "@/api/song";
+import { matchSongUrl, songDownloadUrl, songLyric, songUrl, songLyricTTML } from "@/api/song";
 import { qqMusicMatch } from "@/api/qqmusic";
 import { songLevelData } from "@/utils/meta";
 import { getPlayerInfoObj } from "@/utils/format";
 import { LyricProcessor, type LyricProcessorOptions, type LyricResult } from "./LyricProcessor";
 import { albumDetail } from "@/api/album";
 import { isLogin } from "@/utils/auth";
+import { createFileNameTemplateValues, renderFileNameTemplate } from "@/utils/fileNameTemplate";
+import { sPlayerDownloadPlugin } from "@/platform/android/downloadPlugin";
+import type { AndroidDownloadRequest, AndroidDownloadTask } from "@/types/android-download";
 
 const albumArtistCache = new Map<number, string[] | Promise<string[]>>();
 const MAX_ALBUM_ARTIST_CACHE_SIZE = 100;
+
+const getAndroidDownloadFormat = (
+  fileType: string,
+): Pick<AndroidDownloadRequest, "extension" | "mimeType"> => {
+  const normalized = fileType.toLowerCase();
+  if (normalized === "mp3") return { extension: "mp3", mimeType: "audio/mpeg" };
+  if (normalized === "flac") return { extension: "flac", mimeType: "audio/flac" };
+  throw new Error(`Android 暂不支持下载 ${normalized.toUpperCase()} 格式`);
+};
 
 interface DownloadConfig {
   fileName: string;
@@ -65,7 +77,9 @@ class SongDownloadStrategy implements DownloadStrategy {
   private ttmlLyric = "";
   private yrcLyric = "";
   private albumArtists: string[] = [];
-  private isUnlockDownload = false;
+  private actualQuality = "";
+  private releaseDate?: number;
+  private frozenFileName = "";
 
   constructor(
     public readonly song: SongType,
@@ -84,9 +98,10 @@ class SongDownloadStrategy implements DownloadStrategy {
 
   async prepare(): Promise<void> {
     // 解析下载链接
-    const { url, type } = await this.resolveUrl();
+    const { url, type, level } = await this.resolveUrl();
     this._downloadUrl = url;
     this.fileType = type;
+    this.actualQuality = this.getQualityName(level);
 
     // 获取歌词
     if (this.shouldDownloadLyrics()) {
@@ -138,9 +153,12 @@ class SongDownloadStrategy implements DownloadStrategy {
     }
 
     // 处理专辑艺术家信息
-    if (this.settingStore.downloadMeta) {
-      const album = this.song.album;
-      if (typeof album !== "string") {
+    const album = this.song.album;
+    if (typeof album !== "string") {
+      const needsAlbumDetail =
+        this.settingStore.downloadMeta ||
+        this.settingStore.fileNameTemplate.includes("{releaseDate}");
+      if (needsAlbumDetail) {
         const cached = albumArtistCache.get(album.id);
         if (cached instanceof Array) {
           this.albumArtists = cached;
@@ -150,6 +168,7 @@ class SongDownloadStrategy implements DownloadStrategy {
           const promise = albumDetail(album.id)
             .then((res) => {
               if (res.code === 200) {
+                this.releaseDate = res.album?.publishTime;
                 const artistName = res?.album?.artists?.map((a) => a.name) || [];
                 albumArtistCache.set(album.id, artistName);
                 // 控制缓存大小
@@ -172,8 +191,21 @@ class SongDownloadStrategy implements DownloadStrategy {
           albumArtistCache.set(album.id, promise);
           this.albumArtists = await promise;
         }
+        if (!this.releaseDate && this.settingStore.fileNameTemplate.includes("{releaseDate}")) {
+          const detail = await albumDetail(album.id).catch(() => null);
+          this.releaseDate = detail?.album?.publishTime;
+        }
       }
     }
+    this.releaseDate ??= this.song.releaseDate;
+    this.song.releaseDate = this.releaseDate;
+    this.frozenFileName = renderFileNameTemplate(
+      this.settingStore.fileNameTemplate,
+      createFileNameTemplateValues(this.song, {
+        quality: this.actualQuality,
+        releaseDate: this.releaseDate,
+      }),
+    );
   }
   /**
    * 获取下载配置
@@ -275,10 +307,9 @@ class SongDownloadStrategy implements DownloadStrategy {
     }
   }
 
-  private async resolveUrl(): Promise<{ url: string; type: string }> {
+  private async resolveUrl(): Promise<{ url: string; type: string; level?: string }> {
     const usePlayback = this.settingStore.usePlaybackForDownload;
     const levelName = songLevelData[this.quality].level;
-    this.isUnlockDownload = false;
 
     // 尝试使用播放链接
     if (usePlayback || !isLogin()) {
@@ -288,6 +319,7 @@ class SongDownloadStrategy implements DownloadStrategy {
           return {
             url: result.data[0].url,
             type: (result.data[0].type || result.data[0].encodeType || "mp3").toLowerCase(),
+            level: result.data[0].level,
           };
         }
       } catch (e) {
@@ -300,43 +332,20 @@ class SongDownloadStrategy implements DownloadStrategy {
     const isRestricted = this.song.free === 1 || this.song.free === 4 || this.song.free === 8;
     const canUseUnlock = !isRestricted || isVipUser;
 
-    if (this.settingStore.useUnlockForDownload && canUseUnlock) {
+    const useUnlock =
+      this.settingStore.useUnlockForDownload ||
+      (isNativeAndroid && this.settingStore.useSongUnlock);
+    if (useUnlock && canUseUnlock) {
       try {
-        const servers = this.settingStore.songUnlockServer
-          .filter((s) => s.enabled)
-          .map((s) => s.key);
-        const artist =
-          (Array.isArray(this.song.artists)
-            ? this.song.artists.map((a) => a.name).join(" & ")
-            : this.song.artists) || "";
-        const keyWord = `${this.song.name}-${artist}`;
-
-        if (servers.length > 0) {
-          const results = await Promise.allSettled(
-            servers.map((server) =>
-              unlockSongUrl(this.song.id, keyWord, server, this.song.name, String(artist)).then(
-                (result) => ({
-                  server,
-                  result,
-                  success: result.code === 200 && !!result.url,
-                }),
-              ),
-            ),
-          );
-
-          for (const r of results) {
-            if (r.status === "fulfilled" && r.value.success) {
-              const unlockUrl = r.value?.result?.url;
-              if (unlockUrl) {
-                const extensionMatch = unlockUrl.match(/\.([a-z0-9]+)(?:[?#]|$)/i);
-                this.isUnlockDownload = true;
-                return {
-                  url: unlockUrl,
-                  type: extensionMatch ? extensionMatch[1].toLowerCase() : "mp3",
-                };
-              }
-            }
-          }
+        const matchResult = await matchSongUrl(this.song.id, "unm");
+        const matchUrl =
+          matchResult?.url ||
+          (typeof matchResult?.data === "string" ? matchResult.data : undefined) ||
+          matchResult?.data?.url ||
+          matchResult?.data?.[0]?.url ||
+          matchResult?.proxyUrl;
+        if (/^https?:\/\//i.test(matchUrl || "")) {
+          return { url: matchUrl, type: this.getUrlType(matchUrl), level: levelName };
         }
       } catch (e) {
         console.error("Error fetching unlock url for download:", e);
@@ -351,28 +360,25 @@ class SongDownloadStrategy implements DownloadStrategy {
     return {
       url: result.data.url,
       type: result.data.type?.toLowerCase() || "mp3",
+      level: result.data.level,
     };
+  }
+
+  private getQualityName(level?: string): string {
+    const quality = Object.values(songLevelData).find((item) => item.level === level);
+    return quality?.shortName || songLevelData[this.quality].shortName;
+  }
+
+  private getUrlType(url: string, fallback = "mp3"): string {
+    const extension = url.match(/\.([a-z0-9]+)(?:[?#]|$)/i)?.[1];
+    return (extension || fallback).toLowerCase();
   }
   /**
    * 获取文件名
    * @returns 文件名
    */
   private getFileName(): string {
-    const infoObj = getPlayerInfoObj(this.song) || {
-      name: this.song.name || "未知歌曲",
-      artist: "未知歌手",
-    };
-    const baseTitle = infoObj.name || "未知歌曲";
-    const rawArtist = infoObj.artist || "未知歌手";
-    const safeArtist = rawArtist.replace(/[/:*?"<>|]/g, "&");
-    const { fileNameFormat } = this.settingStore;
-
-    let displayName = baseTitle;
-    if (this.isUnlockDownload) displayName = `${baseTitle} - ${safeArtist}`;
-    else if (fileNameFormat === "artist-title") displayName = `${safeArtist} - ${baseTitle}`;
-    else if (fileNameFormat === "title-artist") displayName = `${baseTitle} - ${safeArtist}`;
-
-    return displayName.replace(/[/:*?"<>|]/g, "&");
+    return this.frozenFileName || this.song.name || "未知歌曲";
   }
   /**
    * 获取下载路径
@@ -402,6 +408,11 @@ class DownloadManager {
   private activeDownloads: Set<number> = new Set();
   private maxConcurrent: number = 1;
   private initialized: boolean = false;
+  private androidTaskBySong = new Map<number, string>();
+  private androidPending = new Map<
+    string,
+    { resolve: () => void; reject: (error: Error) => void }
+  >();
 
   constructor() {
     this.setupIpcListeners();
@@ -410,6 +421,10 @@ class DownloadManager {
   public init() {
     if (this.initialized) return;
     this.initialized = true;
+    if (isNativeAndroid) {
+      void this.setupAndroidDownloads();
+      return;
+    }
     if (!isElectron) return;
 
     const dataStore = useDataStore();
@@ -435,6 +450,97 @@ class DownloadManager {
     });
 
     this.processQueue();
+  }
+
+  private async setupAndroidDownloads() {
+    const settingStore = useSettingStore();
+    try {
+      const directory = await sPlayerDownloadPlugin.getDownloadDirectory();
+      settingStore.downloadPath = directory.displayName;
+    } catch (error) {
+      console.error("读取 Android 下载目录失败:", error);
+    }
+    await sPlayerDownloadPlugin.addListener("taskChanged", (task) => {
+      this.handleAndroidTask(task);
+    });
+    const permissions = await sPlayerDownloadPlugin.checkPermissions();
+    if (permissions.notifications === "prompt" || permissions.storage === "prompt") {
+      await sPlayerDownloadPlugin.requestPermissions();
+    }
+    const dataStore = useDataStore();
+    const { tasks } = await sPlayerDownloadPlugin.list();
+    const nativeSongs = new Set<number>();
+    for (const task of tasks) {
+      const songId = Number(task.clientKey);
+      if (!Number.isFinite(songId)) continue;
+      nativeSongs.add(songId);
+      this.androidTaskBySong.set(songId, task.taskId);
+      this.handleAndroidTask(task);
+    }
+    dataStore.downloadingSongs.forEach((item) => {
+      if (nativeSongs.has(item.song.id)) return;
+      if (item.status === "downloading") dataStore.updateDownloadStatus(item.song.id, "waiting");
+      if (item.status === "waiting") {
+        this.queue.push(new SongDownloadStrategy(item.song as SongType, item.quality));
+      }
+    });
+    this.processQueue();
+  }
+
+  private handleAndroidTask(task: AndroidDownloadTask) {
+    const songId = Number(task.clientKey);
+    if (!Number.isFinite(songId)) return;
+    const dataStore = useDataStore();
+    this.androidTaskBySong.set(songId, task.taskId);
+    if (task.status === "queued") dataStore.updateDownloadStatus(songId, "waiting");
+    if (task.status === "downloading") {
+      dataStore.updateDownloadStatus(songId, "downloading");
+      dataStore.updateDownloadProgress(
+        songId,
+        Number(task.progress.toFixed(1)),
+        this.formatBytes(task.transferredBytes),
+        this.formatBytes(task.totalBytes),
+      );
+    }
+    if (task.status === "completed") {
+      dataStore.removeDownloadingSong(songId);
+      this.androidTaskBySong.delete(songId);
+      this.androidPending.get(task.taskId)?.resolve();
+      this.androidPending.delete(task.taskId);
+      window.$message.success("歌曲已保存到 Download/SPlayer");
+    }
+    if (task.status === "failed") {
+      dataStore.markDownloadFailed(songId);
+      this.androidPending.get(task.taskId)?.reject(new Error(task.message || "下载失败"));
+      this.androidPending.delete(task.taskId);
+    }
+    if (task.status === "cancelled") {
+      this.androidTaskBySong.delete(songId);
+      this.androidPending.get(task.taskId)?.reject(new Error("下载已取消"));
+      this.androidPending.delete(task.taskId);
+    }
+    if (task.status === "conflict") this.showAndroidConflict(task);
+  }
+
+  private showAndroidConflict(task: AndroidDownloadTask) {
+    window.$dialog.warning({
+      title: "文件已存在",
+      content: `${task.fileName}.${task.extension} 已存在，请选择处理方式。`,
+      positiveText: "覆盖",
+      negativeText: "保留副本",
+      closable: true,
+      maskClosable: false,
+      onPositiveClick: () =>
+        sPlayerDownloadPlugin.resolveConflict({ taskId: task.taskId, policy: "replace" }),
+      onNegativeClick: () =>
+        sPlayerDownloadPlugin.resolveConflict({ taskId: task.taskId, policy: "rename" }),
+      onClose: () => sPlayerDownloadPlugin.cancel({ taskId: task.taskId }),
+    });
+  }
+
+  private formatBytes(value: number): string {
+    if (!value) return "0MB";
+    return `${(value / 1024 / 1024).toFixed(2)}MB`;
   }
   /**
    * 设置 IPC 监听器
@@ -496,6 +602,11 @@ class DownloadManager {
     }
     // 从队列中移除
     this.queue = this.queue.filter((task) => task.id !== id);
+    if (isNativeAndroid) {
+      const taskId = this.androidTaskBySong.get(id);
+      if (taskId) void sPlayerDownloadPlugin.cancel({ taskId });
+      this.androidTaskBySong.delete(id);
+    }
     // 从 store 移除
     dataStore.removeDownloadingSong(id);
     // 尝试处理下一个任务
@@ -510,6 +621,23 @@ class DownloadManager {
     const task = dataStore.downloadingSongs.find((s) => s.song.id === id);
     if (task) {
       dataStore.updateDownloadStatus(id, "waiting");
+      if (isNativeAndroid) {
+        const taskId = this.androidTaskBySong.get(id);
+        if (taskId) {
+          const strategy = new SongDownloadStrategy(task.song as SongType, task.quality);
+          void strategy
+            .prepare()
+            .then(() => {
+              const format = getAndroidDownloadFormat(strategy.getDownloadConfig().fileType);
+              return sPlayerDownloadPlugin.retry({ taskId, url: strategy.downloadUrl, ...format });
+            })
+            .catch((error) => {
+              dataStore.markDownloadFailed(id);
+              window.$message.error(error instanceof Error ? error.message : "重试下载失败");
+            });
+          return;
+        }
+      }
       // 重新加入队列
       this.queue.push(new SongDownloadStrategy(task.song as SongType, task.quality));
       this.processQueue();
@@ -575,7 +703,9 @@ class DownloadManager {
       await strategy.prepare();
       const config = strategy.getDownloadConfig();
 
-      if (isElectron) {
+      if (isNativeAndroid) {
+        await this.startAndroidTask(strategy, config);
+      } else if (isElectron) {
         if (!strategy.downloadUrl) throw new Error("Download URL missing");
 
         const downloadResult = await window.electron.ipcRenderer.invoke(
@@ -636,6 +766,44 @@ class DownloadManager {
       this.activeDownloads.delete(strategy.id);
       this.processQueue();
     }
+  }
+
+  private async startAndroidTask(strategy: DownloadStrategy, config: DownloadConfig) {
+    const taskId = crypto.randomUUID();
+    this.androidTaskBySong.set(strategy.id, taskId);
+    const artists = Array.isArray(config.songData.artists)
+      ? config.songData.artists.map((item) => item.name).join(", ")
+      : String(config.songData.artists || "");
+    const album =
+      typeof config.songData.album === "string"
+        ? config.songData.album
+        : config.songData.album?.name || "";
+    const { extension, mimeType } = getAndroidDownloadFormat(config.fileType);
+    const completion = new Promise<void>((resolve, reject) => {
+      this.androidPending.set(taskId, { resolve, reject });
+    });
+    await sPlayerDownloadPlugin.enqueue({
+      taskId,
+      clientKey: String(strategy.id),
+      url: strategy.downloadUrl,
+      fileName: config.fileName,
+      extension,
+      mimeType,
+      duplicatePolicy: "ask",
+      metadata: config.downloadMeta
+        ? {
+            title: config.songData.name,
+            artist: artists,
+            album,
+            albumArtist: config.albumArtists.join(", ") || undefined,
+            year: config.songData.releaseDate
+              ? String(new Date(config.songData.releaseDate).getFullYear())
+              : undefined,
+            track: config.songData.trackNumber ? String(config.songData.trackNumber) : undefined,
+          }
+        : undefined,
+    });
+    await completion;
   }
 }
 

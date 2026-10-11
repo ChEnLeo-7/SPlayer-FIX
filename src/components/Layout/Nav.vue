@@ -312,7 +312,8 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   height: calc(70px + var(--safe-area-inset-top));
-  padding: var(--safe-area-inset-top) 1rem 0;
+  padding: var(--safe-area-inset-top) calc(1rem + var(--safe-area-inset-right)) 0
+    calc(1rem + var(--safe-area-inset-left));
   background-color: transparent;
   -webkit-app-region: drag;
   .n-button {
@@ -370,7 +371,8 @@ onMounted(async () => {
   .nav {
     align-items: flex-start;
     height: calc(126px + var(--safe-area-inset-top));
-    padding: var(--safe-area-inset-top) 1rem 0;
+    padding: var(--safe-area-inset-top) calc(1rem + var(--safe-area-inset-right)) 0
+      calc(1rem + var(--safe-area-inset-left));
     .page-control,
     .nav-main {
       height: 62px;

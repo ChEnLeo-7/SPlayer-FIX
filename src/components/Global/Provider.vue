@@ -41,6 +41,8 @@ import {
 import { useSettingStore, useStatusStore } from "@/stores";
 import { setColorSchemes, MONOTONOUS_THEME } from "@/utils/color";
 import { useCustomCode } from "@/composables/useCustomCode";
+import { isNativeAndroid } from "@/utils/env";
+import { systemBarsPlugin } from "@/platform/android/systemBarsPlugin";
 // import { rgbToHex } from "@imsyy/color-utils";
 import themeColor from "@/assets/data/themeColor.json";
 
@@ -71,6 +73,13 @@ const theme = computed(() => {
       ? darkTheme
       : null;
 });
+
+const syncAndroidSystemBars = () => {
+  if (!isNativeAndroid) return;
+  void systemBarsPlugin.setStyle({
+    style: theme.value || statusStore.showFullPlayer ? "DARK" : "LIGHT",
+  });
+};
 
 // 获取当前主题色数据
 const getThemeMainColor = () => {
@@ -306,6 +315,8 @@ watch(
   ],
   () => changeGlobalTheme(),
 );
+
+watch(() => [theme.value, statusStore.showFullPlayer], syncAndroidSystemBars, { immediate: true });
 
 // 自定义颜色更改
 watchDebounced(

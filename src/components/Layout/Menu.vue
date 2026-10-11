@@ -342,6 +342,9 @@ const menuOptions = computed<MenuOption[] | MenuGroupOption[]>(() => {
 
 // 生成歌单列表
 const hasLoginAccount = computed(() => Boolean(isLogin() && dataStore.userData.userId));
+const sidebarLikeData = computed(() =>
+  hasLoginAccount.value ? dataStore.neteaseLikeData : dataStore.userLikeData,
+);
 
 const renderCoverMenu = (list: CoverType[], showCover: boolean, type: "playlist" | "album") => {
   const iconName = type === "album" ? "Album" : "PlayList";
@@ -375,11 +378,7 @@ const createPlaylist = computed<MenuOption[]>(() => {
 // 收藏的歌单
 const likedPlaylist = computed<MenuOption[]>(() => {
   if (!hasLoginAccount.value) {
-    return renderCoverMenu(
-      dataStore.neteaseLikeData.playlists,
-      settingStore.menuShowCover,
-      "playlist",
-    );
+    return renderCoverMenu(sidebarLikeData.value.playlists, settingStore.menuShowCover, "playlist");
   }
   const userId = dataStore.userData.userId;
   const list = dataStore.neteaseLikeData.playlists.filter(
@@ -389,7 +388,7 @@ const likedPlaylist = computed<MenuOption[]>(() => {
 });
 
 const likedAlbum = computed<MenuOption[]>(() => {
-  return renderCoverMenu(dataStore.neteaseLikeData.albums, settingStore.menuShowCover, "album");
+  return renderCoverMenu(sidebarLikeData.value.albums, settingStore.menuShowCover, "album");
 });
 
 // 本地歌单菜单
@@ -520,7 +519,7 @@ const checkMenuItem = () => {
       // 获取歌单 id
       const playlistId = Number(router.currentRoute.value.query.id || 0);
       // 是否处于用户歌单
-      const isUserPlaylist = dataStore.neteaseLikeData.playlists.some(
+      const isUserPlaylist = sidebarLikeData.value.playlists.some(
         (playlist) => playlist?.id === playlistId,
       );
       // 是否为本地歌单
@@ -539,7 +538,7 @@ const checkMenuItem = () => {
     }
     case "album": {
       const albumId = Number(router.currentRoute.value.query.id || 0);
-      const isLikedAlbum = dataStore.neteaseLikeData.albums.some(
+      const isLikedAlbum = sidebarLikeData.value.albums.some(
         (album) => Number(album?.id) === albumId,
       );
       if (albumId && isLikedAlbum) {
