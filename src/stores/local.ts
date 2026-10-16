@@ -4,6 +4,8 @@ import { cloneDeep } from "lodash-es";
 import localforage from "localforage";
 import { getStartupGuestSnapshot } from "@/utils/accountScope";
 
+export const LOCAL_ACCOUNT_CHANGED_EVENT = "splayer:local-account-changed";
+
 // localDB
 const localDB = localforage.createInstance({
   name: "local-data",
@@ -159,6 +161,7 @@ const createLocalStore = () => {
   const saveLocalPlaylists = async () => {
     try {
       await localDB.setItem("local-playlists", cloneDeep(localPlaylists.value));
+      window.dispatchEvent(new Event(LOCAL_ACCOUNT_CHANGED_EVENT));
     } catch (error) {
       console.error("Error saving local playlists:", error);
       throw error;

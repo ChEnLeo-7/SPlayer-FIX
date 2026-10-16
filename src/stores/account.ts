@@ -13,7 +13,7 @@ import {
 } from "@/api/splayerAccount";
 import { sPlayerAccountKeyPlugin } from "@/platform/android/accountKeyPlugin";
 import { useDataStore } from "@/stores/data";
-import { useLocalStore } from "@/stores/local";
+import { LOCAL_ACCOUNT_CHANGED_EVENT, useLocalStore } from "@/stores/local";
 import { createDefaultSettingState, useSettingStore } from "@/stores/setting";
 import { createDefaultShortcutState, useShortcutStore } from "@/stores/shortcut";
 import { createDefaultStatusState, useStatusStore } from "@/stores/status";
@@ -158,6 +158,7 @@ export const useAccountStore = defineStore("splayer-account", () => {
   let lifecycleGeneration = 0;
   let onlineHandler: (() => void) | null = null;
   let visibilityHandler: (() => void) | null = null;
+  let localAccountChangeHandler: (() => void) | null = null;
   let accountWorkQueue: Promise<void> = Promise.resolve();
   let localChangeGeneration = 0;
 
@@ -289,8 +290,12 @@ export const useAccountStore = defineStore("splayer-account", () => {
     pollTimer = null;
     if (onlineHandler) window.removeEventListener("online", onlineHandler);
     if (visibilityHandler) document.removeEventListener("visibilitychange", visibilityHandler);
+    if (localAccountChangeHandler) {
+      window.removeEventListener(LOCAL_ACCOUNT_CHANGED_EVENT, localAccountChangeHandler);
+    }
     onlineHandler = null;
     visibilityHandler = null;
+    localAccountChangeHandler = null;
   };
 
   const resetToGuest = () => {
@@ -875,6 +880,10 @@ export const useAccountStore = defineStore("splayer-account", () => {
     stopSyncLifecycle();
     lifecycleActive = true;
     const generation = lifecycleGeneration;
+    localAccountChangeHandler = () => {
+      if (!syncSuspended) scheduleSync();
+    };
+    window.addEventListener(LOCAL_ACCOUNT_CHANGED_EVENT, localAccountChangeHandler);
     onlineHandler = () => {
       if (generation !== lifecycleGeneration) return;
       resetRetryBackoff();
