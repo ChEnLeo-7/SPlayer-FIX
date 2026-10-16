@@ -258,6 +258,22 @@ test("容量错误回滚整批操作和游标", async (context) => {
   assert.equal(info.json().sync.operationCount, 0);
 });
 
+test("支持包含大型本地歌单封面的加密操作", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "splayer-sync-large-operation-"));
+  const app = await buildAccountApp({ databasePath: join(directory, "account.db") });
+  context.after(async () => {
+    await app.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  const account = await register(app, "Large.Operation");
+  await migrate(app, account.cookie);
+  const largeOperation = operation(1, { ciphertext: "x".repeat(1024 * 1024) });
+  const response = await append(app, account.cookie, [largeOperation]);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().headCursor, 1);
+});
+
 test("SSE 只通知账户游标", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "splayer-sync-sse-"));
   const app = await buildAccountApp({ databasePath: join(directory, "account.db") });
