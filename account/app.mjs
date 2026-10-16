@@ -98,18 +98,26 @@ function requireUuid(value, name) {
 
 function requireBase64Url(value, name, maximumBytes, exactBytes) {
   const encoded = requireString(value, name, Math.ceil((maximumBytes * 4) / 3));
-  if (!/^[A-Za-z0-9_-]+$/u.test(encoded)) {
+  const isBase64Url = /^[A-Za-z0-9_-]+$/u.test(encoded);
+  const isStandardBase64 = !isBase64Url && /^[A-Za-z0-9+/]+={0,2}$/u.test(encoded);
+  if (!isBase64Url && !isStandardBase64) {
     throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
   }
   const decoded = Buffer.from(encoded, "base64url");
   if (
-    decoded.toString("base64url") !== encoded ||
     decoded.length > maximumBytes ||
     (exactBytes !== undefined && decoded.length !== exactBytes)
   ) {
     throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
   }
-  return { encoded, bytes: decoded.length };
+  const normalized = decoded.toString("base64url");
+  if (isBase64Url && normalized !== encoded) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  if (isStandardBase64 && decoded.toString("base64") !== encoded) {
+    throw new ApiError(400, "INVALID_REQUEST", `${name} 格式无效`);
+  }
+  return { encoded: normalized, bytes: decoded.length };
 }
 
 function normalizeUsername(username) {
